@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nthlayer"
+version = "1.5.0a1"
+description = "NthLayer core — reliability-critical verdict store, case management, and HTTP API"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "nthlayer-common>=0.1.8",
+    "starlette>=0.40",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+nthlayer = "nthlayer.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+]
+
+[tool.uv.sources]
+nthlayer-common = { path = "../nthlayer-common", editable = true }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
