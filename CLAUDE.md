@@ -7,7 +7,7 @@ Reliability-critical HTTP API server for verdict store, case management, and rel
 
 ```
 nthlayer-core/
-  src/nthlayer/
+  src/nthlayer_core/
     __init__.py   # Package marker
     cli.py        # CLI entry point: nthlayer serve [--host 0.0.0.0] [--port 8000]
     catalogue.py  # ManifestCatalogue: loads/caches OpenSRM manifests from dir, mtime-based polling (load, poll, get, list_all, to_dict_list); _manifest_to_dict() serialises to JSON-safe dict
@@ -23,7 +23,7 @@ nthlayer-core/
     test_api_manifests.py   # Manifest catalogue API: TestGetManifests (list_all, expected_fields, slo_includes_judgment_type), TestGetManifest (get_existing, get_nonexistent → 404), TestManifestsReload (new/modified/deleted file detection, no_changes), TestCatalogueUnit (empty/nonexistent dir, invalid yaml skipped)
     test_store.py           # Store test suite: schema, verdicts, lineage, cases, freezes, heartbeats, component state
     test_retention.py       # Retention test suite: TestVerdictRetention, TestAssessmentRetention, TestCaseRetention, TestChangeFreezeRetention, TestHeartbeatRetention, TestRekorAnchorsNeverPruned, TestRetentionGuards
-  pyproject.toml    # name="nthlayer"; deps: nthlayer-common, starlette, uvicorn, httpx
+  pyproject.toml    # name="nthlayer-core", version="1.0.0"; script: nthlayer → nthlayer_core.cli:main; deps: nthlayer-common, starlette, uvicorn, httpx
 ```
 
 ### HTTP API
@@ -187,3 +187,7 @@ uv pip install -e .
 - `httpx>=0.27` — HTTP client (also used in tests via `ASGITransport`)
 
 Dev: `pytest>=8.2`, `pytest-asyncio>=0.23` (`asyncio_mode = "auto"`), `httpx>=0.27`
+
+## Documentation
+
+- `README.md` — added 2026-04-28; project-level overview for GitHub and contributors
