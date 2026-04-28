@@ -15,7 +15,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "serve":
-        from nthlayer.server import run_server
+        from nthlayer_core.server import run_server
 
         run_server(host=args.host, port=args.port)
     else:

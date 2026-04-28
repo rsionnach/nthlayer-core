@@ -6,9 +6,9 @@ import pytest
 import yaml
 from httpx import ASGITransport, AsyncClient
 
-from nthlayer.catalogue import ManifestCatalogue
-from nthlayer.server import app, set_catalogue, set_store
-from nthlayer.store import Store
+from nthlayer_core.catalogue import ManifestCatalogue
+from nthlayer_core.server import app, set_catalogue, set_store
+from nthlayer_core.store import Store
 
 
 @pytest.fixture

@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from nthlayer.server import app, set_store, _derive_priority
-from nthlayer.store import Store
+from nthlayer_core.server import app, set_store, _derive_priority
+from nthlayer_core.store import Store
 
 
 @pytest.fixture

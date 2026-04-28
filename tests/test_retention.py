@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from nthlayer.store import Store
+from nthlayer_core.store import Store
 
 
 @pytest.fixture

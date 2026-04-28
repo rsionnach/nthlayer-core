@@ -18,8 +18,8 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 import uvicorn
 
-from nthlayer.catalogue import ManifestCatalogue, manifest_to_dict
-from nthlayer.store import Store
+from nthlayer_core.catalogue import ManifestCatalogue, manifest_to_dict
+from nthlayer_core.store import Store
 
 # Module-level store instance, initialised on first request or at startup
 _store: Store | None = None

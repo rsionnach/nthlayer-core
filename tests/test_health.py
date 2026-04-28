@@ -2,7 +2,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from nthlayer.server import app
+from nthlayer_core.server import app
 
 
 @pytest.mark.asyncio
