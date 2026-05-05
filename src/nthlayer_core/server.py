@@ -76,6 +76,88 @@ async def _parse_json_body(request: Request) -> tuple[dict | None, JSONResponse 
         )
 
 
+# CloudEvents auto-detect for v1.5 — opensrm-saun.1.2.
+#
+# Auto-detect contract: a body with top-level ``specversion`` is treated as
+# a CloudEvents envelope; without it, the body is treated as a raw record
+# (back-compat for tests and pre-saun.1.2 callers). v2 will deprecate the
+# raw path and require the envelope.
+#
+# Error shape:
+#   400 envelope_invalid (envelope-level: cannot unwrap)  envelope_version: null
+#   422 record_invalid   (envelope unwrapped, inner record fails validation)  envelope_version: "1.0"
+#
+# The 400/422 split lets workers debugging transport issues distinguish
+# from domain issues without parsing detail strings.
+
+_ENVELOPE_REQUIRED_ATTRS = ("specversion", "type", "source", "id")
+
+
+def _looks_like_envelope(body: dict) -> bool:
+    """A body with top-level ``specversion`` is treated as a CloudEvents envelope."""
+    return "specversion" in body
+
+
+def _unwrap_envelope(body: dict) -> tuple[dict | None, JSONResponse | None]:
+    """Validate envelope attributes and return the inner ``data`` payload.
+
+    Returns (inner_data, None) on success or (None, 400_response) when the
+    envelope is malformed. ``data`` must itself be a dict — non-dict data
+    is an envelope-level error since it can never produce a valid record.
+    """
+    missing = [attr for attr in _ENVELOPE_REQUIRED_ATTRS if attr not in body]
+    if missing:
+        return None, JSONResponse(
+            {
+                "error": "envelope_invalid",
+                "detail": f"missing required CloudEvents attribute(s): {missing}",
+                "envelope_version": None,
+            },
+            status_code=400,
+        )
+    if body.get("specversion") != "1.0":
+        return None, JSONResponse(
+            {
+                "error": "envelope_invalid",
+                "detail": f"unsupported CloudEvents specversion: {body['specversion']}",
+                "envelope_version": None,
+            },
+            status_code=400,
+        )
+    data = body.get("data")
+    if not isinstance(data, dict):
+        return None, JSONResponse(
+            {
+                "error": "envelope_invalid",
+                "detail": "envelope 'data' must be a JSON object",
+                "envelope_version": None,
+            },
+            status_code=400,
+        )
+    return data, None
+
+
+def _validate_required(
+    record: dict,
+    required: tuple[str, ...],
+    *,
+    error_code: str,
+    envelope_version: str | None,
+) -> JSONResponse | None:
+    """Check required fields on the inner record. Returns 422 on miss."""
+    missing = [f for f in required if f not in record]
+    if missing:
+        return JSONResponse(
+            {
+                "error": error_code,
+                "detail": {"fields": missing},
+                "envelope_version": envelope_version,
+            },
+            status_code=422,
+        )
+    return None
+
+
 def _parse_int_param(params, name: str, default: int) -> tuple[int, JSONResponse | None]:
     """Parse an integer query parameter. Returns (value, None) or (0, error_response)."""
     raw = params.get(name)
@@ -105,27 +187,41 @@ async def health(request: Request) -> JSONResponse:
 # -- Verdicts --
 
 async def post_verdict(request: Request) -> JSONResponse:
-    """Create a verdict. Immutable after creation."""
+    """Create a verdict. Immutable after creation.
+
+    Accepts either a CloudEvents v1.0 envelope (auto-detected by
+    ``specversion``) or a raw verdict dict. Envelopes are unwrapped before
+    validation. See ``_unwrap_envelope`` for the error contract.
+    """
     body, err = await _parse_json_body(request)
     if err:
         return err
 
-    required = ("id", "type", "created_at")
-    missing = [f for f in required if f not in body]
-    if missing:
-        return JSONResponse(
-            {"error": "missing_fields", "detail": {"fields": missing}},
-            status_code=422,
-        )
+    if _looks_like_envelope(body):
+        record, env_err = _unwrap_envelope(body)
+        if env_err:
+            return env_err
+        envelope_version: str | None = "1.0"
+    else:
+        record = body
+        envelope_version = None
+
+    err = _validate_required(
+        record, ("id", "type", "created_at"),
+        error_code="verdict_invalid",
+        envelope_version=envelope_version,
+    )
+    if err:
+        return err
 
     try:
         store = _get_store()
-        vid = store.put_verdict(body)
+        vid = store.put_verdict(record)
         return JSONResponse({"id": vid}, status_code=201)
     except Exception as e:
         if "UNIQUE constraint" in str(e):
             return JSONResponse(
-                {"error": "duplicate", "detail": {"id": body.get("id")}},
+                {"error": "duplicate", "detail": {"id": record.get("id")}},
                 status_code=409,
             )
         return JSONResponse(
@@ -240,27 +336,41 @@ async def post_verdict_outcome(request: Request) -> JSONResponse:
 # -- Assessments --
 
 async def post_assessment(request: Request) -> JSONResponse:
-    """Create an assessment."""
+    """Create an assessment.
+
+    Accepts either a CloudEvents v1.0 envelope (auto-detected by
+    ``specversion``) or a raw assessment dict. See ``_unwrap_envelope``
+    for the error contract.
+    """
     body, err = await _parse_json_body(request)
     if err:
         return err
 
-    required = ("id", "service", "kind", "created_at")
-    missing = [f for f in required if f not in body]
-    if missing:
-        return JSONResponse(
-            {"error": "missing_fields", "detail": {"fields": missing}},
-            status_code=422,
-        )
+    if _looks_like_envelope(body):
+        record, env_err = _unwrap_envelope(body)
+        if env_err:
+            return env_err
+        envelope_version: str | None = "1.0"
+    else:
+        record = body
+        envelope_version = None
+
+    err = _validate_required(
+        record, ("id", "service", "kind", "created_at"),
+        error_code="assessment_invalid",
+        envelope_version=envelope_version,
+    )
+    if err:
+        return err
 
     try:
         store = _get_store()
-        aid = store.put_assessment(body)
+        aid = store.put_assessment(record)
         return JSONResponse({"id": aid}, status_code=201)
     except Exception as e:
         if "UNIQUE constraint" in str(e):
             return JSONResponse(
-                {"error": "duplicate", "detail": {"id": body.get("id")}},
+                {"error": "duplicate", "detail": {"id": record.get("id")}},
                 status_code=409,
             )
         return JSONResponse(

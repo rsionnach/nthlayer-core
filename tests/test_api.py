@@ -75,10 +75,14 @@ class TestPostVerdict:
 
     @pytest.mark.asyncio
     async def test_missing_fields_returns_422(self, client):
+        # Raw-dict path (no envelope) — opensrm-saun.1.2 contract:
+        # error="verdict_invalid", envelope_version=None to distinguish
+        # from envelope-level errors (which return 400 envelope_invalid).
         r = await client.post("/verdicts", json={"service": "test"})
         assert r.status_code == 422
         body = r.json()
-        assert body["error"] == "missing_fields"
+        assert body["error"] == "verdict_invalid"
+        assert body["envelope_version"] is None
         assert "id" in body["detail"]["fields"]
         assert "type" in body["detail"]["fields"]
         assert "created_at" in body["detail"]["fields"]
@@ -279,6 +283,88 @@ class TestOutcomeResolution:
         r2 = await client.post("/verdicts/dup-target/outcome", json={"outcome_status": "overridden"})
         assert r2.status_code == 409
         assert r2.json()["error"] == "duplicate"
+
+
+# -- POST /verdicts CloudEvents envelope contract (opensrm-saun.1.2) --
+
+def _envelope(record: dict, *, ce_type: str = "io.nthlayer.verdict.action_request.v1") -> dict:
+    """Build a minimal valid CloudEvents v1.0 envelope around a record."""
+    return {
+        "specversion": "1.0",
+        "type": ce_type,
+        "source": "urn:nthlayer:test:default",
+        "id": record.get("id", "vrd-env-1"),
+        "time": record.get("created_at", "2026-05-02T00:00:00Z"),
+        "datacontenttype": "application/json",
+        "data": record,
+    }
+
+
+class TestPostVerdictEnvelope:
+    """Auto-detect contract: top-level ``specversion`` triggers unwrap."""
+
+    @pytest.mark.asyncio
+    async def test_envelope_unwrap_succeeds(self, client):
+        r = await client.post("/verdicts", json=_envelope(_verdict(vid="vrd-env-ok")))
+        assert r.status_code == 201
+        assert r.json()["id"] == "vrd-env-ok"
+
+    @pytest.mark.asyncio
+    async def test_envelope_missing_specversion_falls_back_to_raw(self, client):
+        # Without specversion the body is treated as a raw record. A raw
+        # body that happens to look envelope-shaped (has type+source+id but
+        # no specversion) goes through the raw validator, which finds the
+        # record's required fields and either passes or 422s.
+        env = _envelope(_verdict(vid="vrd-fallback-raw"))
+        del env["specversion"]
+        r = await client.post("/verdicts", json=env)
+        # The raw record is the envelope dict itself, which lacks a
+        # "created_at" key (envelope uses "time"). Expect 422 verdict_invalid.
+        assert r.status_code == 422
+        assert r.json()["error"] == "verdict_invalid"
+        assert r.json()["envelope_version"] is None
+
+    @pytest.mark.asyncio
+    async def test_envelope_missing_required_attr_returns_400(self, client):
+        env = _envelope(_verdict())
+        del env["source"]
+        r = await client.post("/verdicts", json=env)
+        assert r.status_code == 400
+        body = r.json()
+        assert body["error"] == "envelope_invalid"
+        assert body["envelope_version"] is None
+        assert "source" in body["detail"]
+
+    @pytest.mark.asyncio
+    async def test_envelope_wrong_specversion_returns_400(self, client):
+        env = _envelope(_verdict())
+        env["specversion"] = "0.3"
+        r = await client.post("/verdicts", json=env)
+        assert r.status_code == 400
+        body = r.json()
+        assert body["error"] == "envelope_invalid"
+        assert "0.3" in body["detail"]
+        assert body["envelope_version"] is None
+
+    @pytest.mark.asyncio
+    async def test_envelope_non_dict_data_returns_400(self, client):
+        env = _envelope(_verdict())
+        env["data"] = "not-a-dict"
+        r = await client.post("/verdicts", json=env)
+        assert r.status_code == 400
+        assert r.json()["error"] == "envelope_invalid"
+
+    @pytest.mark.asyncio
+    async def test_envelope_inner_record_invalid_returns_422(self, client):
+        # Envelope unwraps successfully, but inner record is missing
+        # required verdict fields. Distinguishable from envelope_invalid
+        # via envelope_version="1.0".
+        env = _envelope({"id": "vrd-inner-bad"})
+        r = await client.post("/verdicts", json=env)
+        assert r.status_code == 422
+        body = r.json()
+        assert body["error"] == "verdict_invalid"
+        assert body["envelope_version"] == "1.0"
 
 
 # -- POST /assessments --
