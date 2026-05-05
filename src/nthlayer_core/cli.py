@@ -5,7 +5,7 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(description="NthLayer core")
-    parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.5.0a1")
+    parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.5.0")
     sub = parser.add_subparsers(dest="command")
 
     serve_parser = sub.add_parser("serve", help="Start the core HTTP server")

@@ -11,7 +11,7 @@ nthlayer-core/
     __init__.py   # Package marker
     cli.py        # CLI entry point: nthlayer serve [--host 0.0.0.0] [--port 8000]
     catalogue.py  # ManifestCatalogue: loads/caches OpenSRM manifests from dir, mtime-based polling (load, poll, get, list_all, to_dict_list); _manifest_to_dict() serialises to JSON-safe dict
-    server.py     # Starlette app; full verdict+assessment+case+change-freeze+heartbeat+component-state+manifests HTTP API; set_store()/set_catalogue() injection; _derive_priority(); run_server(host, port) via uvicorn
+    server.py     # Starlette app; full verdict+assessment+case+change-freeze+heartbeat+component-state+manifests HTTP API; set_store()/set_catalogue() injection; _derive_priority(); run_server(host, port) via uvicorn; CloudEvents auto-detect (opensrm-saun.1.2): body with top-level specversion → unwrap envelope before validation; without → raw dict (back-compat; v2 will require envelope); _ENVELOPE_REQUIRED_ATTRS=("specversion","type","source","id"); error split: 400 envelope_invalid (cannot unwrap) vs 422 record_invalid (inner record fails validation); both carry envelope_version field (None=envelope-level, "1.0"=inner record validated); helpers: _looks_like_envelope(), _unwrap_envelope(), _validate_required()
     store.py      # Unified SQLite store: Store class, 10-table schema v1.5.0, WAL mode
   tests/
     test_health.py      # Async ASGI test: GET /health returns 200 {"status": "ok"}
@@ -34,7 +34,7 @@ Env vars: `NTHLAYER_STORE_PATH` — path to SQLite db (default `nthlayer.db`); `
 
 | Method | Path | Response |
 |--------|------|----------|
-| `POST` | `/verdicts` | 201 `{id}` \| 422 missing_fields \| 409 duplicate |
+| `POST` | `/verdicts` | 201 `{id}` \| 400 `envelope_invalid` (malformed CE envelope, envelope_version=null) \| 422 `verdict_invalid` (missing id/type/created_at, envelope_version=null for raw; "1.0" for unwrapped envelope) \| 409 duplicate; `+00:00` timezone offset in `created_after`/`created_before` URL-safe (+ decoded as space handled) |
 | `GET` | `/verdicts` | list; query params: `service`, `type`, `created_after`, `created_before`, `limit` (default 100) |
 | `GET` | `/verdicts/{verdict_id}` | dict \| 404 not_found |
 | `GET` | `/verdicts/{verdict_id}/ancestors` | list; query param: `max_hops` |

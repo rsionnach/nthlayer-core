@@ -6,6 +6,36 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## v1.5.0 — 2026-05-03
+
+First lockstep release with the rest of the v1.5 ecosystem. Major change:
+
+**CloudEvents envelope auto-detect on POST /verdicts and /assessments**
+(opensrm-saun.1.2). Both endpoints now detect a CloudEvents v1.0 envelope
+by the presence of a top-level `specversion` field and unwrap the inner
+`data` payload before validation. Raw record submissions continue to work
+(back-compat for tests and pre-saun.1.2 callers). v2 will deprecate the
+raw path and require the envelope. New error contract:
+- `400 envelope_invalid` — envelope-level error (missing required
+  CloudEvents attribute, wrong specversion, non-dict data).
+  `envelope_version: null` so workers debugging transport issues can
+  distinguish from domain errors.
+- `422 verdict_invalid` / `422 assessment_invalid` — envelope unwrapped,
+  inner record fails validation. `envelope_version: "1.0"` so the
+  caller knows the envelope side was OK.
+
+The bead also surfaced and resolved the cross-tier wire-format alignment
+issue: workers' `to_dict(Verdict)` was emitting `verdict_type`/`timestamp`
+while core's API expected `type`/`created_at`. Fix landed in
+`nthlayer-common`; core's contract now matches what wrapped envelopes
+deliver.
+
+7 new tests in `tests/test_api.py::TestPostVerdictEnvelope` cover the
+auto-detect contract: envelope round-trip, missing-attr 400, wrong
+specversion 400, non-dict data 400, inner-record 422 with
+`envelope_version: "1.0"`, and the raw-fallback path (no envelope, status
+quo behaviour).
+
 ## Provenance
 
 `nthlayer-core` is the Tier 1 (reliability-critical) process in the three-tier
