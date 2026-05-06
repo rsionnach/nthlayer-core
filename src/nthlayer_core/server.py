@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 
+import structlog
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -20,6 +21,28 @@ import uvicorn
 
 from nthlayer_core.catalogue import ManifestCatalogue, manifest_to_dict
 from nthlayer_core.store import Store
+
+logger = structlog.get_logger()
+
+
+def _store_error_response(handler: str, exc: Exception, **context) -> JSONResponse:
+    """Log a store-layer exception server-side and return a generic 500.
+
+    Raw exception strings (sqlite3 error messages, constraint names) must
+    not leak to clients (opensrm-9uow.1). Operators read the structured
+    log line; clients receive only ``error="internal_error"``.
+    """
+    logger.error(
+        "core_store_error",
+        handler=handler,
+        exc_type=type(exc).__name__,
+        exc=str(exc),
+        **context,
+    )
+    return JSONResponse(
+        {"error": "internal_error", "detail": {"message": "store operation failed"}},
+        status_code=500,
+    )
 
 # Module-level store instance, initialised on first request or at startup
 _store: Store | None = None
@@ -217,10 +240,7 @@ async def post_verdict(request: Request) -> JSONResponse:
                 {"error": "duplicate", "detail": {"id": record.get("id")}},
                 status_code=409,
             )
-        return JSONResponse(
-            {"error": "store_error", "detail": {"message": str(e)}},
-            status_code=500,
-        )
+        return _store_error_response("post_verdict", e, verdict_id=record.get("id"))
 
 
 async def get_verdicts(request: Request) -> JSONResponse:
@@ -320,9 +340,8 @@ async def post_verdict_outcome(request: Request) -> JSONResponse:
                 {"error": "duplicate", "detail": {"id": outcome_verdict["id"]}},
                 status_code=409,
             )
-        return JSONResponse(
-            {"error": "store_error", "detail": {"message": str(e)}},
-            status_code=500,
+        return _store_error_response(
+            "post_verdict_outcome", e, verdict_id=outcome_verdict["id"]
         )
 
 
@@ -366,10 +385,7 @@ async def post_assessment(request: Request) -> JSONResponse:
                 {"error": "duplicate", "detail": {"id": record.get("id")}},
                 status_code=409,
             )
-        return JSONResponse(
-            {"error": "store_error", "detail": {"message": str(e)}},
-            status_code=500,
-        )
+        return _store_error_response("post_assessment", e, assessment_id=record.get("id"))
 
 
 async def get_assessments(request: Request) -> JSONResponse:
@@ -441,10 +457,7 @@ async def post_case(request: Request) -> JSONResponse:
                 {"error": "duplicate", "detail": {"id": body.get("id")}},
                 status_code=409,
             )
-        return JSONResponse(
-            {"error": "store_error", "detail": {"message": str(e)}},
-            status_code=500,
-        )
+        return _store_error_response("post_case", e, case_id=body.get("id"))
 
 
 async def get_cases(request: Request) -> JSONResponse:
@@ -613,10 +626,7 @@ async def post_change_freeze(request: Request) -> JSONResponse:
                 {"error": "duplicate", "detail": {"name": body.get("name")}},
                 status_code=409,
             )
-        return JSONResponse(
-            {"error": "store_error", "detail": {"message": str(e)}},
-            status_code=500,
-        )
+        return _store_error_response("post_change_freeze", e, freeze_name=body.get("name"))
 
 
 async def get_change_freezes(request: Request) -> JSONResponse:

@@ -397,3 +397,72 @@ class TestAssessments:
         await client.post("/assessments", json=_assessment(aid="a2", service="payment-api"))
         r = await client.get("/assessments", params={"service": "fraud-detect"})
         assert len(r.json()) == 1
+
+
+# -- Error response opacity (opensrm-9uow.1) --
+
+class TestStoreErrorOpacity:
+    """Store-layer exceptions must not leak SQLite internals to clients.
+
+    The pre-fix behaviour returned ``{"error": "store_error", "detail":
+    {"message": str(e)}}`` which exposed SQLite error messages (constraint
+    names, schema hints) to whoever could POST. The fix logs full context
+    server-side via structlog and returns a generic ``internal_error``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_post_verdict_returns_generic_error_on_store_failure(self, client, monkeypatch):
+        """Simulated store failure produces internal_error, not raw exception text."""
+        from nthlayer_core import server as srv
+
+        def boom(_record):
+            raise RuntimeError("UNDISCLOSED: PRAGMA table_info(verdicts) revealed schema")
+
+        monkeypatch.setattr(srv._get_store(), "put_verdict", boom)
+        r = await client.post("/verdicts", json=_verdict())
+        assert r.status_code == 500
+        body = r.json()
+        assert body["error"] == "internal_error"
+        # The exception message must not appear in the response.
+        assert "UNDISCLOSED" not in str(body)
+        assert "PRAGMA" not in str(body)
+        assert "table_info" not in str(body)
+
+    @pytest.mark.asyncio
+    async def test_post_assessment_returns_generic_error_on_store_failure(self, client, monkeypatch):
+        from nthlayer_core import server as srv
+
+        def boom(_record):
+            raise RuntimeError("INTERNAL: column 'kind' constraint failed")
+
+        monkeypatch.setattr(srv._get_store(), "put_assessment", boom)
+        r = await client.post("/assessments", json=_assessment())
+        assert r.status_code == 500
+        body = r.json()
+        assert body["error"] == "internal_error"
+        assert "INTERNAL" not in str(body)
+        assert "column" not in str(body)
+        assert "constraint" not in str(body)
+
+    @pytest.mark.asyncio
+    async def test_post_case_returns_generic_error_on_store_failure(self, client, monkeypatch):
+        from nthlayer_core import server as srv
+
+        def boom(_body):
+            raise RuntimeError("INTERNAL: foreign key fk_underlying_verdict violated")
+
+        monkeypatch.setattr(srv._get_store(), "put_case", boom)
+        r = await client.post(
+            "/cases",
+            json={
+                "id": "case-xyz",
+                "kind": "incident",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "underlying_verdict": "vrd-1",
+            },
+        )
+        assert r.status_code == 500
+        body = r.json()
+        assert body["error"] == "internal_error"
+        assert "foreign key" not in str(body)
+        assert "violated" not in str(body)
