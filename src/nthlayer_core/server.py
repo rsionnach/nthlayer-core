@@ -76,19 +76,12 @@ async def _parse_json_body(request: Request) -> tuple[dict | None, JSONResponse 
         )
 
 
-# CloudEvents auto-detect for v1.5 — opensrm-saun.1.2.
-#
-# Auto-detect contract: a body with top-level ``specversion`` is treated as
-# a CloudEvents envelope; without it, the body is treated as a raw record
-# (back-compat for tests and pre-saun.1.2 callers). v2 will deprecate the
-# raw path and require the envelope.
-#
-# Error shape:
-#   400 envelope_invalid (envelope-level: cannot unwrap)  envelope_version: null
-#   422 record_invalid   (envelope unwrapped, inner record fails validation)  envelope_version: "1.0"
-#
-# The 400/422 split lets workers debugging transport issues distinguish
-# from domain issues without parsing detail strings.
+# CloudEvents auto-detect on POST /verdicts and /assessments.
+# Body with top-level ``specversion`` -> unwrap envelope before validation;
+# without -> treat as raw record (v1.5 back-compat). 400=envelope_invalid,
+# 422=record_invalid; envelope_version null|"1.0" lets callers distinguish
+# transport from domain errors.
+# See docs/superpowers/decisions/envelope-contract-auto-detect-to-mandatory.md
 
 _ENVELOPE_REQUIRED_ATTRS = ("specversion", "type", "source", "id")
 
