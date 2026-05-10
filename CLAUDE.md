@@ -23,6 +23,10 @@ nthlayer-core/
     test_api_manifests.py   # Manifest catalogue API: TestGetManifests (list_all, expected_fields, slo_includes_judgment_type), TestGetManifest (get_existing, get_nonexistent → 404), TestManifestsReload (new/modified/deleted file detection, no_changes), TestCatalogueUnit (empty/nonexistent dir, invalid yaml skipped)
     test_store.py           # Store test suite: schema, verdicts, lineage, cases, freezes, heartbeats, component state
     test_retention.py       # Retention test suite: TestVerdictRetention, TestAssessmentRetention, TestCaseRetention, TestChangeFreezeRetention, TestHeartbeatRetention, TestRekorAnchorsNeverPruned, TestRetentionGuards
+  tests/smoke/
+    __init__.py             # Package marker
+    test_imports.py         # Walks every module under nthlayer_core via pkgutil; asserts every __all__ symbol resolves
+    test_cli.py             # Asserts the nthlayer console script is on PATH and --help exits 0 with non-empty stdout
   pyproject.toml    # name="nthlayer-core", version="1.0.0"; script: nthlayer → nthlayer_core.cli:main; deps: nthlayer-common, starlette, uvicorn, httpx
 ```
 
@@ -191,3 +195,13 @@ Dev: `pytest>=8.2`, `pytest-asyncio>=0.23` (`asyncio_mode = "auto"`), `httpx>=0.
 ## Documentation
 
 - `README.md` — added 2026-04-28; project-level overview for GitHub and contributors
+
+## CI / Release pipeline
+
+nthlayer-core uses `googleapis/release-please-action@v4`. On every push to `main`, release-please inspects Conventional Commits and maintains a release PR that bumps `pyproject.toml` and appends `CHANGELOG.md`. Config lives in `release-please-config.json` (package type `python`, `changelog-sections` filter) and `.release-please-manifest.json` (current version anchor). Commit taxonomy: `feat`/`fix`/`perf`/`deps`/`refactor`/`docs` surface in the changelog; `chore`/`test`/`ci`/`build`/`style` are hidden. When the release PR is merged, release-please creates the GitHub release tag and `release.yml` fires.
+
+`release.yml` includes a Docker-based smoke gate inserted between `twine check` and the PyPI publish action. A `python:3.11-slim` container mounts `dist/` and `tests/smoke/` read-only, installs the freshly-built wheel plus pytest, and runs the smoke suite. Stale `__all__` exports, missing runtime deps, and broken entry points are caught before the wheel reaches PyPI. Failure blocks publish. See `tests/smoke/` for the suite (catalogued in the Architecture section above).
+
+**Known trigger issue:** `release.yml` fires on `release: published`. The `GITHUB_TOKEN`-cascade-block means release-please-created releases do not trigger `release.yml` automatically, so the tag `v1.1.0` created today did NOT auto-publish to PyPI. Remediation: pivot to `push: tags: ['v*']` trigger or configure release-please with a PAT. See bead `opensrm-pdoe` for triage.
+
+Dependabot config (`.github/dependabot.yml`) declares two ecosystems — `uv` for `pyproject.toml` + `uv.lock`, and `github-actions` for workflow files — both on a Monday-morning Europe/Dublin schedule. Sibling `nthlayer-*` packages and dev deps are each grouped into a single weekly PR. Auto-merge policy (`.github/workflows/dependabot-automerge.yml`): external runtime patch and dev patch/minor auto-merge; sibling packages and any major bump require review.
