@@ -6,6 +6,30 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [1.6.0](https://github.com/rsionnach/nthlayer-core/compare/v1.5.0...v1.6.0) (2026-05-10)
+
+
+### Features
+
+* **server:** CloudEvents envelope auto-detect on POST /verdicts + /assessments ([9bace14](https://github.com/rsionnach/nthlayer-core/commit/9bace144f6ba292f90bdc7ef9186b6de73e506a1))
+
+
+### Bug Fixes
+
+* **core:** suppress raw exception strings in 500 responses ([76466fc](https://github.com/rsionnach/nthlayer-core/commit/76466fc514842c175fd09c1860e56e6fb1993ecf))
+
+
+### Code Refactoring
+
+* align package name + import path symmetrically (nthlayer-core) ([4cc19fc](https://github.com/rsionnach/nthlayer-core/commit/4cc19fc6353ff3c3512e7350264e0446243ee240))
+
+
+### Documentation
+
+* add README — Tier 1 HTTP API server overview ([29c351c](https://github.com/rsionnach/nthlayer-core/commit/29c351cc085f45506f8dcef7ffa1dc30a047386a))
+* **CLAUDE.md:** document _store_error_response opacity helper ([32425e4](https://github.com/rsionnach/nthlayer-core/commit/32425e4997b6f32431266c220a6fee7f71cc5a0e))
+* **comments:** inline pointer to envelope auto-detect decision ([ecfe749](https://github.com/rsionnach/nthlayer-core/commit/ecfe749ed57f48e8a3e94d37171c2503b05465e4))
+
 ## v1.5.0 — 2026-05-03
 
 First lockstep release with the rest of the v1.5 ecosystem. Major change:
