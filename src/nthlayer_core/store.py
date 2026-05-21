@@ -18,6 +18,15 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from nthlayer_common.verdicts.models import AccuracyReport, Outcome, Verdict
+from nthlayer_common.verdicts.serialise import from_dict, to_dict
+from nthlayer_common.verdicts.store import (
+    AccuracyFilter,
+    OutcomeStatusMismatch,
+    VerdictFilter,
+    VerdictStore,
+)
+
 SCHEMA_VERSION = "1.5.0"
 
 _SCHEMA = """
@@ -135,10 +144,15 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 """
 
 
-class Store:
+class Store(VerdictStore):
     """Unified SQLite store for the core process.
 
     WAL mode, BEGIN IMMEDIATE for writes, connection pool via thread-local storage.
+
+    Formally implements the VerdictStore ABC (opensrm-jmy.18 B0). The
+    ``accuracy`` and ``expire`` methods raise NotImplementedError: Store's
+    content-blob schema lacks the denormalised columns SQLiteVerdictStore
+    requires. Schema unification is tracked in opensrm-jmy.20.
     """
 
     def __init__(self, path: str | Path):
@@ -177,6 +191,176 @@ class Store:
         except Exception:
             conn.execute("ROLLBACK")
             raise
+
+    # -- VerdictStore ABC implementation (opensrm-jmy.18 B0) --
+    # These methods satisfy the VerdictStore interface used by
+    # apply_override_to_verdict and other nthlayer-common callers.
+    # They delegate to or wrap the existing dict-based verdict methods.
+
+    def put(self, verdict: Verdict) -> None:
+        """Implement VerdictStore.put: serialise Verdict and delegate to put_verdict."""
+        self.put_verdict(to_dict(verdict))
+
+    def get(self, verdict_id: str) -> Verdict | None:
+        """Implement VerdictStore.get: read via get_verdict and deserialise."""
+        d = self.get_verdict(verdict_id)
+        if d is None:
+            return None
+        return from_dict(d)
+
+    def query(self, criteria: VerdictFilter) -> list[Verdict]:
+        """Implement VerdictStore.query: map VerdictFilter to query_verdicts kwargs.
+
+        Field mapping:
+        - ``subject_service`` → ``service`` (Store's denormalised top-level column)
+        - ``subject_type`` → ``verdict_type`` (the ``type`` column)
+        - ``from_time`` / ``to_time`` → ``created_after`` / ``created_before``
+        - ``limit`` → ``limit``
+
+        Unmapped VerdictFilter fields (producer_system, subject_agent, status, tags)
+        are not filterable at the SQL layer against Store's content-blob schema;
+        they are applied as a Python post-filter pass.
+        """
+        created_after: str | None = None
+        created_before: str | None = None
+        if criteria.from_time is not None:
+            created_after = criteria.from_time.isoformat()
+        if criteria.to_time is not None:
+            created_before = criteria.to_time.isoformat()
+
+        rows = self.query_verdicts(
+            # subject_service is the denormalised service column in Store's schema
+            service=criteria.subject_service,
+            verdict_type=criteria.subject_type,
+            created_after=created_after,
+            created_before=created_before,
+            limit=criteria.limit,
+        )
+        verdicts = [from_dict(r) for r in rows]
+
+        # Python post-filter for fields not expressible as Store SQL predicates.
+        if criteria.producer_system:
+            verdicts = [v for v in verdicts if v.producer.system == criteria.producer_system]
+        if criteria.subject_agent:
+            verdicts = [v for v in verdicts if v.subject.agent == criteria.subject_agent]
+        if criteria.status:
+            verdicts = [v for v in verdicts if v.outcome.status == criteria.status]
+        if criteria.tags:
+            verdicts = [
+                v for v in verdicts
+                if v.judgment.tags and set(criteria.tags) & set(v.judgment.tags)
+            ]
+
+        return verdicts
+
+    def update_outcome(
+        self,
+        verdict_id: str,
+        outcome: Outcome,
+        *,
+        expected_status: str | None = None,
+    ) -> Verdict:
+        """Implement VerdictStore.update_outcome with CAS support.
+
+        CAS via ``json_extract(content, '$.outcome.status')`` with IFNULL
+        coalescing so that verdicts stored without an explicit outcome.status
+        are treated as 'pending' (the dataclass default).
+        """
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT content FROM verdicts WHERE id = ?",
+            (verdict_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Verdict {verdict_id} not found")
+
+        # Deserialise the full content blob — get_verdict returns exactly
+        # json.loads(row["content"]), which is what from_dict expects.
+        content_dict = json.loads(row["content"])
+        verdict = from_dict(content_dict)
+        verdict.outcome = outcome
+
+        new_content = json.dumps(to_dict(verdict))
+
+        if expected_status is None:
+            # Unconditional last-writer-wins (mirrors SQLiteVerdictStore).
+            conn.execute(
+                "UPDATE verdicts SET content = ? WHERE id = ?",
+                (new_content, verdict_id),
+            )
+            conn.commit()
+            return verdict
+
+        # CAS path: cheap pre-check on the value we just read.
+        current_outcome = content_dict.get("outcome") or {}
+        current_status = current_outcome.get("status", "pending")
+        if current_status != expected_status:
+            raise OutcomeStatusMismatch(
+                f"Verdict {verdict_id}: outcome.status is {current_status!r}, "
+                f"expected {expected_status!r}"
+            )
+
+        # Conditional UPDATE: only succeeds if outcome.status still matches.
+        # IFNULL coalesces absent outcome.status to 'pending' (dataclass default).
+        cursor = conn.execute(
+            "UPDATE verdicts SET content = ? "
+            "WHERE id = ? "
+            "AND IFNULL(json_extract(content, '$.outcome.status'), 'pending') "
+            "= IFNULL(?, 'pending')",
+            (new_content, verdict_id, expected_status),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            # CAS lost — a concurrent writer transitioned the verdict.
+            after = conn.execute(
+                "SELECT json_extract(content, '$.outcome.status') AS s "
+                "FROM verdicts WHERE id = ?",
+                (verdict_id,),
+            ).fetchone()
+            current = after["s"] if after else "<deleted>"
+            raise OutcomeStatusMismatch(
+                f"Verdict {verdict_id}: outcome.status raced to {current!r}, "
+                f"expected {expected_status!r}"
+            )
+        return verdict
+
+    def accuracy(self, criteria: AccuracyFilter) -> AccuracyReport:
+        """Not implemented: Store's content-blob schema lacks the required columns.
+
+        Use SQLiteVerdictStore for verdict accuracy reporting.
+        Schema unification is tracked in opensrm-jmy.20.
+        """
+        raise NotImplementedError(
+            "Store does not implement accuracy queries. "
+            "Use SQLiteVerdictStore for verdict accuracy reporting. "
+            "Schema unification is tracked in opensrm-jmy.20."
+        )
+
+    def by_lineage(self, verdict_id: str, direction: str = "both") -> list[Verdict]:
+        """Implement VerdictStore.by_lineage: wrap ancestors_of / descendants_of."""
+        if direction == "up":
+            rows = self.ancestors_of(verdict_id)
+        elif direction == "down":
+            rows = self.descendants_of(verdict_id)
+        elif direction == "both":
+            rows = [*self.ancestors_of(verdict_id), *self.descendants_of(verdict_id)]
+        else:
+            raise ValueError(f"unknown direction {direction!r}")
+        return [from_dict(r) for r in rows]
+
+    def expire(self) -> int:
+        """Not implemented: Store has run_retention with a different semantic.
+
+        Use SQLiteVerdictStore for VerdictStore.expire semantics,
+        or Store.run_retention for the core retention model.
+        Schema unification is tracked in opensrm-jmy.20.
+        """
+        raise NotImplementedError(
+            "Store does not implement TTL expiration. "
+            "Use SQLiteVerdictStore for VerdictStore.expire semantics, "
+            "or Store.run_retention for the core retention model. "
+            "Schema unification is tracked in opensrm-jmy.20."
+        )
 
     # -- Verdict operations --
 
