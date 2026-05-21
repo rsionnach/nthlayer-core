@@ -14,12 +14,12 @@ from nthlayer_common.verdicts.models import (
     Subject,
     Verdict,
 )
-from nthlayer_common.verdicts.store import MemoryStore
 from nthlayer_core import server
+from nthlayer_core.store import Store
 
 
 def _make_verdict(vid: str, *, outcome_status: str = "pending") -> Verdict:
-    """Build a Verdict dataclass for seeding into MemoryStore."""
+    """Build a Verdict dataclass for seeding into Store."""
     return Verdict(
         id=vid,
         version=1,
@@ -34,10 +34,11 @@ def _make_verdict(vid: str, *, outcome_status: str = "pending") -> Verdict:
         judgment=Judgment(action="approve", confidence=0.9),
         outcome=Outcome(status=outcome_status),
         service="fraud-detect",
+        verdict_type="action_request",
     )
 
 
-def _seed_pending(store: MemoryStore, vid: str) -> None:
+def _seed_pending(store: Store, vid: str) -> None:
     """Place a pending Verdict in the store keyed by vid."""
     store.put(_make_verdict(vid, outcome_status="pending"))
 
@@ -60,8 +61,8 @@ def _body(decision_id: str = "dec-1", **overrides) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_override_happy_path_returns_200_and_mutates_outcome():
-    store = MemoryStore()
+async def test_override_happy_path_returns_200_and_mutates_outcome(tmp_path):
+    store = Store(str(tmp_path / "test.db"))
     _seed_pending(store, "dec-1")
     server.set_store(store)
 
@@ -79,8 +80,8 @@ async def test_override_happy_path_returns_200_and_mutates_outcome():
 
 
 @pytest.mark.asyncio
-async def test_override_idempotent_reapply_returns_200():
-    store = MemoryStore()
+async def test_override_idempotent_reapply_returns_200(tmp_path):
+    store = Store(str(tmp_path / "test.db"))
     _seed_pending(store, "dec-2")
     server.set_store(store)
 
@@ -96,8 +97,8 @@ async def test_override_idempotent_reapply_returns_200():
 
 
 @pytest.mark.asyncio
-async def test_override_verdict_not_found_returns_404():
-    store = MemoryStore()
+async def test_override_verdict_not_found_returns_404(tmp_path):
+    store = Store(str(tmp_path / "test.db"))
     server.set_store(store)
 
     transport = ASGITransport(app=server.app)
@@ -111,8 +112,8 @@ async def test_override_verdict_not_found_returns_404():
 
 
 @pytest.mark.asyncio
-async def test_override_decision_id_mismatch_returns_400():
-    store = MemoryStore()
+async def test_override_decision_id_mismatch_returns_400(tmp_path):
+    store = Store(str(tmp_path / "test.db"))
     _seed_pending(store, "dec-real")
     server.set_store(store)
 
@@ -127,8 +128,8 @@ async def test_override_decision_id_mismatch_returns_400():
 
 
 @pytest.mark.asyncio
-async def test_override_schema_failure_returns_422():
-    store = MemoryStore()
+async def test_override_schema_failure_returns_422(tmp_path):
+    store = Store(str(tmp_path / "test.db"))
     _seed_pending(store, "dec-3")
     server.set_store(store)
 
@@ -149,8 +150,8 @@ async def test_override_schema_failure_returns_422():
 
 
 @pytest.mark.asyncio
-async def test_override_conflict_with_existing_returns_409():
-    store = MemoryStore()
+async def test_override_conflict_with_existing_returns_409(tmp_path):
+    store = Store(str(tmp_path / "test.db"))
     _seed_pending(store, "dec-4")
     server.set_store(store)
 
@@ -167,9 +168,9 @@ async def test_override_conflict_with_existing_returns_409():
 
 
 @pytest.mark.asyncio
-async def test_override_terminal_status_returns_422():
+async def test_override_terminal_status_returns_422(tmp_path):
     """A confirmed verdict cannot be overridden."""
-    store = MemoryStore()
+    store = Store(str(tmp_path / "test.db"))
     v = _build_confirmed_verdict("dec-5")
     store.put(v)
     server.set_store(store)
@@ -182,3 +183,68 @@ async def test_override_terminal_status_returns_422():
     assert resp.json()["error"] == "validation_error"
 
     server.set_store(None)
+
+
+@pytest.mark.asyncio
+async def test_override_persists_to_real_sqlite_store(tmp_path):
+    """opensrm-jmy.18 B3: end-to-end override against real Store(tmp_path)."""
+    store = Store(str(tmp_path / "real-store.db"))
+    _seed_pending(store, "real-1")
+    server.set_store(store)
+
+    transport = ASGITransport(app=server.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/verdicts/real-1/override",
+            json={
+                "decision_id": "real-1",
+                "service": "fraud-detect",
+                "corrected_action": "approve",
+                "reviewer": "operator-hash",
+                "timestamp": "2026-05-21T09:00:00+00:00",
+            },
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"id": "real-1", "status": "overridden"}
+
+    # Verify persistence with a FRESH read (not the in-memory object).
+    fresh = store.get("real-1")
+    assert fresh is not None
+    assert fresh.outcome.status == "overridden"
+    assert fresh.outcome.override is not None
+    assert fresh.outcome.override.by == "operator-hash"
+    assert fresh.outcome.override.action == "approve"
+
+    # Verify CAS — a second override with same content is idempotent.
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp2 = await client.post(
+            "/verdicts/real-1/override",
+            json={
+                "decision_id": "real-1",
+                "service": "fraud-detect",
+                "corrected_action": "approve",
+                "reviewer": "operator-hash",
+                "timestamp": "2026-05-21T09:00:00+00:00",
+            },
+        )
+    assert resp2.status_code == 200  # idempotent re-apply
+
+    # Verify CAS conflict — a different reviewer on the same already-overridden verdict.
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp3 = await client.post(
+            "/verdicts/real-1/override",
+            json={
+                "decision_id": "real-1",
+                "service": "fraud-detect",
+                "corrected_action": "approve",
+                "reviewer": "different-hash",
+                "timestamp": "2026-05-21T09:00:00+00:00",
+            },
+        )
+    assert resp3.status_code == 409
+    assert resp3.json()["error"] == "conflict"
+
+    server.set_store(None)
+    if hasattr(store, "close"):
+        store.close()
