@@ -19,6 +19,11 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 import uvicorn
 
+from nthlayer_common.overrides import (
+    OverrideEvent,
+    OverridePrivacyConfig,
+    apply_override_to_verdict,
+)
 from nthlayer_core.catalogue import ManifestCatalogue, manifest_to_dict
 from nthlayer_core.store import Store
 
@@ -343,6 +348,67 @@ async def post_verdict_outcome(request: Request) -> JSONResponse:
         return _store_error_response(
             "post_verdict_outcome", e, verdict_id=outcome_verdict["id"]
         )
+
+
+async def post_verdict_override(request: Request) -> JSONResponse:
+    """Apply an operator override to a verdict (mutation-style, opensrm-jmy.18).
+
+    Calls apply_override_to_verdict on the verdict store, mutating the
+    original verdict's outcome in place. Distinct from POST /outcome
+    which creates an outcome_resolution child verdict (lineage-style).
+    """
+    verdict_id = request.path_params["verdict_id"]
+    body, err = await _parse_json_body(request)
+    if err:
+        return err
+
+    # Coerce ISO timestamp string to datetime so OverrideEvent.__post_init__
+    # can validate tzinfo. JSON wire format sends strings; OverrideEvent
+    # expects a tz-aware datetime object.
+    parsed_body = dict(body)
+    if isinstance(parsed_body.get("timestamp"), str):
+        try:
+            parsed_body["timestamp"] = datetime.fromisoformat(parsed_body["timestamp"])
+        except ValueError as exc:
+            return JSONResponse(
+                {"error": "validation_error", "detail": str(exc)},
+                status_code=422,
+            )
+
+    try:
+        event = OverrideEvent(**parsed_body)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse(
+            {"error": "validation_error", "detail": str(exc)},
+            status_code=422,
+        )
+
+    if event.decision_id != verdict_id:
+        return JSONResponse(
+            {"error": "decision_id_mismatch",
+             "detail": {"path": verdict_id, "body": event.decision_id}},
+            status_code=400,
+        )
+
+    store = _get_store()
+    privacy = OverridePrivacyConfig(pre_redacted=True, exclude_reason=False)
+    result = apply_override_to_verdict(store, event, privacy=privacy)
+
+    if result is not None:
+        return JSONResponse(
+            {"id": verdict_id, "status": "overridden"},
+            status_code=200,
+        )
+
+    # None-path: read the verdict back to map cause -> HTTP status.
+    verdict = store.get(verdict_id)
+    if verdict is None:
+        return JSONResponse({"error": "verdict_not_found"}, status_code=404)
+
+    current = (getattr(verdict.outcome, "status", None) or "").lower()
+    if current == "overridden":
+        return JSONResponse({"error": "conflict"}, status_code=409)
+    return JSONResponse({"error": "validation_error"}, status_code=422)
 
 
 # -- Assessments --
@@ -823,6 +889,7 @@ routes = [
     Route("/verdicts/{verdict_id}/ancestors", get_verdict_ancestors, methods=["GET"]),
     Route("/verdicts/{verdict_id}/descendants", get_verdict_descendants, methods=["GET"]),
     Route("/verdicts/{verdict_id}/outcome", post_verdict_outcome, methods=["POST"]),
+    Route("/verdicts/{verdict_id}/override", post_verdict_override, methods=["POST"]),
     # Assessments
     Route("/assessments", post_assessment, methods=["POST"]),
     Route("/assessments", get_assessments, methods=["GET"]),
