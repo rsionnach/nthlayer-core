@@ -12,7 +12,7 @@ nthlayer-core/
     cli.py        # CLI entry point: nthlayer serve [--host 0.0.0.0] [--port 8000]
     catalogue.py  # ManifestCatalogue: loads/caches OpenSRM manifests from dir, mtime-based polling (load, poll, get, list_all, to_dict_list); _manifest_to_dict() serialises to JSON-safe dict
     server.py     # Starlette app; full verdict+assessment+case+change-freeze+heartbeat+component-state+manifests HTTP API; set_store()/set_catalogue() injection; _derive_priority(); run_server(host, port) via uvicorn; CloudEvents auto-detect (opensrm-saun.1.2): body with top-level specversion → unwrap envelope before validation; without → raw dict (back-compat; v2 will require envelope); _ENVELOPE_REQUIRED_ATTRS=("specversion","type","source","id"); error split: 400 envelope_invalid (cannot unwrap) vs 422 record_invalid (inner record fails validation); both carry envelope_version field (None=envelope-level, "1.0"=inner record validated); helpers: _looks_like_envelope(), _unwrap_envelope(), _validate_required(); _store_error_response(handler, exc, **context) — logs full exception server-side via structlog (core_store_error event), returns generic {"error": "internal_error"} 500 to client (no raw SQLite strings leak, opensrm-9uow.1); TestStoreErrorOpacity (3 tests in test_api.py) validates opacity; post_verdict_override handler (opensrm-jmy.18): mutation-style POST /verdicts/{verdict_id}/override — coerces ISO timestamp string to datetime, calls apply_override_to_verdict with pre_redacted=True (privacy applied once at sidecar boundary), returns 200 {id, status:"overridden"} / 404 verdict_not_found / 409 conflict / 422 validation_error / 400 decision_id_mismatch (path vs body decision_id mismatch guard)
-    store.py      # Unified SQLite store: Store class, 10-table schema v1.5.0, WAL mode
+    store.py      # Unified SQLite store: Store class formally implements VerdictStore ABC (opensrm-jmy.18 B0); 10-table schema v1.5.0, WAL mode; VerdictStore methods: put(verdict), get(id)->Verdict|None, update_outcome(id, outcome, expected_status=None)->Verdict (CAS; raises KeyError/OutcomeStatusMismatch), query(VerdictFilter)->list[Verdict], by_lineage(id, direction)->list[Verdict]; accuracy() and expire() raise NotImplementedError (schema unification in opensrm-jmy.20)
   tests/
     test_health.py      # Async ASGI test: GET /health returns 200 {"status": "ok"}
     test_api.py         # Full HTTP API test suite: TestHealth, TestPostVerdict, TestGetVerdicts (incl. time_range_filter_with_timezone_offset), TestLineage, TestOutcomeResolution, TestAssessments
@@ -20,9 +20,10 @@ nthlayer-core/
     test_api_heartbeats.py      # Heartbeat + monitoring API: TestPostHeartbeat, TestGetHeartbeats, TestStuckActionRequests
     test_api_component_state.py # Component state persistence API: TestPutComponentState (save, overwrite, invalid_body), TestGetComponentState (get_existing, get_nonexistent, empty_dict_roundtrip, roundtrip_preserves_state)
     test_api_suppressions.py    # Suppressions API: TestPostSuppression (create_suppression, create_without_related_verdict, missing_component/reason/suppressed_verdict_id → 422), TestGetSuppressions (query_all, filter_by_component, filter_by_time_range, empty_result, suppression_contains_all_fields)
-    test_api_overrides.py       # Override handler (opensrm-jmy.18): 7 async tests — happy_path_returns_200_and_mutates_outcome, idempotent_reapply_returns_200, verdict_not_found_returns_404, decision_id_mismatch_returns_400, schema_failure_returns_422 (missing corrected_action), conflict_with_existing_returns_409, terminal_status_returns_422 (confirmed verdict); uses MemoryStore + set_store(store) injection; pre_redacted=True means reviewer stored plaintext in outcome.override.by
+    test_api_overrides.py       # Override handler (opensrm-jmy.18): 8 async tests — happy_path_returns_200_and_mutates_outcome, idempotent_reapply_returns_200, verdict_not_found_returns_404, decision_id_mismatch_returns_400, schema_failure_returns_422 (missing corrected_action), conflict_with_existing_returns_409, terminal_status_returns_422 (confirmed verdict), override_persists_to_real_sqlite_store (B3 — real Store not MemoryStore; verifies fresh read persistence + idempotent re-apply + CAS conflict); uses Store.put(Verdict) + Store.get(id) VerdictStore ABC methods; pre_redacted=True means reviewer stored plaintext in outcome.override.by
     test_api_manifests.py   # Manifest catalogue API: TestGetManifests (list_all, expected_fields, slo_includes_judgment_type), TestGetManifest (get_existing, get_nonexistent → 404), TestManifestsReload (new/modified/deleted file detection, no_changes), TestCatalogueUnit (empty/nonexistent dir, invalid yaml skipped)
     test_store.py           # Store test suite: schema, verdicts, lineage, cases, freezes, heartbeats, component state
+    test_store_verdictstore.py  # VerdictStore ABC compliance (opensrm-jmy.18 B0): TestStoreIsVerdictStore, TestPutAndGet, TestUpdateOutcomeUnconditional, TestUpdateOutcomeCAS (CAS success/mismatch/race), TestQuery (filter/limit), TestByLineage (up/down/both/unknown direction); all tests use real SQLite Store(tmp_path)
     test_retention.py       # Retention test suite: TestVerdictRetention, TestAssessmentRetention, TestCaseRetention, TestChangeFreezeRetention, TestHeartbeatRetention, TestRekorAnchorsNeverPruned, TestRetentionGuards
   tests/smoke/
     __init__.py             # Package marker
@@ -154,6 +155,13 @@ Unified SQLite store owned exclusively by the core process. Workers and bench ac
 - Retention: verdicts only pruned when old AND no younger descendant in lineage AND not referenced by a surviving case; `rekor_anchors` never pruned; active change freezes always preserved
 
 **Public API (`Store`):**
+- **VerdictStore ABC methods** (opensrm-jmy.18 B0 — used by `apply_override_to_verdict` and nthlayer-common callers):
+  - `put(verdict: Verdict) -> None` — serialises via `to_dict()` and writes; also populates lineage index
+  - `get(id: str) -> Verdict | None` — deserialises via `from_dict()`; returns `None` if not found
+  - `update_outcome(id, new_outcome, expected_status=None) -> Verdict` — CAS write; raises `KeyError` if verdict not found; raises `OutcomeStatusMismatch` if `expected_status` is set and doesn't match current status; returns updated `Verdict`
+  - `query(filter: VerdictFilter) -> list[Verdict]` — uses `subject_service`, `verdict_type`, `limit` from filter
+  - `by_lineage(id, direction) -> list[Verdict]` — direction: `"up"` (ancestors), `"down"` (descendants), `"both"`; raises `ValueError` on unknown direction
+  - `accuracy()` / `expire()` — raise `NotImplementedError` (schema unification tracked in opensrm-jmy.20)
 - `put_verdict(verdict)` → `str` — writes verdict + populates lineage index
 - `get_verdict(id)` → `dict | None`
 - `query_verdicts(*, service, verdict_type, created_after, created_before, limit=100)` → `list[dict]`
