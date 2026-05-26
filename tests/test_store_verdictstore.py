@@ -126,6 +126,54 @@ class TestUpdateOutcomeCAS:
         with pytest.raises(OutcomeStatusMismatch):
             store.update_outcome("cas-2", Outcome(status="overridden"), expected_status="pending")
 
+    def test_cas_with_expected_pending_against_missing_outcome_succeeds(self, store):
+        """opensrm-jmy.18 edge-case: verdict with no outcome key is treated as pending.
+
+        The IFNULL coalescing in update_outcome treats a missing
+        outcome.status as 'pending', so expected_status='pending' should
+        succeed even when the content blob has no outcome field at all.
+        """
+        import json
+
+        conn = store._get_conn()
+        # Minimal content blob that from_dict can deserialise — outcome key absent entirely.
+        minimal_content = json.dumps({
+            "id": "no-outcome",
+            "version": 1,
+            "created_at": "2026-05-21T00:00:00+00:00",
+            "producer": {"system": "fraud-detect"},
+            "subject": {
+                "type": "agent_output",
+                "ref": "fraud-detect",
+                "summary": "test verdict",
+            },
+            "judgment": {"action": "approve", "confidence": 0.9},
+            # NOTE: no 'outcome' key at all
+        })
+        conn.execute(
+            "INSERT INTO verdicts (id, type, service, created_at, content) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("no-outcome", "action_request", "fraud-detect", "2026-05-21T00:00:00+00:00", minimal_content),
+        )
+        conn.commit()
+
+        # CAS with expected_status="pending" must succeed — IFNULL coalesces absent
+        # outcome.status to 'pending' at both the pre-check (content_dict.get("outcome"))
+        # and the conditional SQL UPDATE.
+        new_outcome = Outcome(status="overridden")
+        try:
+            result = store.update_outcome("no-outcome", new_outcome, expected_status="pending")
+        except OutcomeStatusMismatch:
+            pytest.fail(
+                "CAS predicate failed against missing outcome key (IFNULL coalescing broken)"
+            )
+
+        assert result.outcome.status == "overridden"
+        # Verify the update persisted.
+        got = store.get("no-outcome")
+        assert got is not None
+        assert got.outcome.status == "overridden"
+
     def test_cas_raises_on_concurrent_race(self, store):
         """Race scenario: first writer wins, second CAS fails."""
         v = _build_pending("cas-3")
