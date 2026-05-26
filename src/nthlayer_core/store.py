@@ -246,6 +246,8 @@ class Store(VerdictStore):
         if criteria.status:
             verdicts = [v for v in verdicts if v.outcome.status == criteria.status]
         if criteria.tags:
+            # Any-tag match: a verdict matches if ANY filter tag intersects its tags
+            # (mirrors SQLiteVerdictStore semantics). Use set intersection, not subset.
             verdicts = [
                 v for v in verdicts
                 if v.judgment.tags and set(criteria.tags) & set(v.judgment.tags)
