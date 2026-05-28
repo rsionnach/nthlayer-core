@@ -159,7 +159,7 @@ Unified SQLite store owned exclusively by the core process. Workers and bench ac
   - `put(verdict: Verdict) -> None` — serialises via `to_dict()` and writes; also populates lineage index
   - `get(id: str) -> Verdict | None` — deserialises via `from_dict()`; returns `None` if not found
   - `update_outcome(id, new_outcome, expected_status=None) -> Verdict` — CAS write; raises `KeyError` if verdict not found; raises `OutcomeStatusMismatch` if `expected_status` is set and doesn't match current status; returns updated `Verdict`. CAS predicate uses `IFNULL(json_extract(content, '$.outcome.status'), 'pending')` so a verdict whose `content` blob omits the `outcome` field entirely is treated as `status='pending'` and accepts a CAS with `expected_status='pending'` (locked by `test_store_verdictstore.py::test_cas_with_expected_pending_against_missing_outcome_succeeds`).
-  - `query(filter: VerdictFilter) -> list[Verdict]` — uses `subject_service`, `verdict_type`, `limit` from filter
+  - `query(filter: VerdictFilter) -> list[Verdict]` — maps `subject_service`→service, `subject_type`→verdict_type, `from_time`/`to_time`→created_after/created_before, `limit` to SQL; post-filters producer_system, subject_agent, status, tags in Python (not expressible as Store SQL predicates against the content-blob schema)
   - `by_lineage(id, direction) -> list[Verdict]` — direction: `"up"` (ancestors), `"down"` (descendants), `"both"`; raises `ValueError` on unknown direction
   - `accuracy()` / `expire()` — raise `NotImplementedError` (schema unification tracked in opensrm-jmy.20)
 - `put_verdict(verdict)` → `str` — writes verdict + populates lineage index
