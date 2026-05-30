@@ -2,10 +2,12 @@
 import argparse
 import sys
 
+from nthlayer_core import __version__
+
 
 def main():
     parser = argparse.ArgumentParser(description="NthLayer core")
-    parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.5.0")
+    parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command")
 
     serve_parser = sub.add_parser("serve", help="Start the core HTTP server")
