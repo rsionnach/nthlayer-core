@@ -1,217 +1,102 @@
 # nthlayer-core
 
-Reliability-critical HTTP API server for verdict store, case management, and related NthLayer core services. Python, Starlette/uvicorn, runtime component (stateful, no LLM).
+Reliability-critical HTTP API server: verdict store, case management,
+change freezes, heartbeats, component state, manifests, suppressions,
+overrides. Python + Starlette + Uvicorn, **stateful, no LLM**.
 
-<!-- AUTO-MANAGED: architecture -->
-## Architecture
+The single writer to the SQLite store. Workers and bench access it
+exclusively via this API — never via direct store access.
 
-```
-nthlayer-core/
-  src/nthlayer_core/
-    __init__.py   # Package marker
-    cli.py        # CLI entry point: nthlayer serve [--host 0.0.0.0] [--port 8000]
-    catalogue.py  # ManifestCatalogue: loads/caches OpenSRM manifests from dir, mtime-based polling (load, poll, get, list_all, to_dict_list); _manifest_to_dict() serialises to JSON-safe dict
-    server.py     # Starlette app; full verdict+assessment+case+change-freeze+heartbeat+component-state+manifests HTTP API; set_store()/set_catalogue() injection; _derive_priority(); run_server(host, port) via uvicorn; CloudEvents auto-detect (opensrm-saun.1.2): body with top-level specversion → unwrap envelope before validation; without → raw dict (back-compat; v2 will require envelope); _ENVELOPE_REQUIRED_ATTRS=("specversion","type","source","id"); error split: 400 envelope_invalid (cannot unwrap) vs 422 record_invalid (inner record fails validation); both carry envelope_version field (None=envelope-level, "1.0"=inner record validated); helpers: _looks_like_envelope(), _unwrap_envelope(), _validate_required(); _store_error_response(handler, exc, **context) — logs full exception server-side via structlog (core_store_error event), returns generic {"error": "internal_error"} 500 to client (no raw SQLite strings leak, opensrm-9uow.1); TestStoreErrorOpacity (3 tests in test_api.py) validates opacity; post_verdict_override handler (opensrm-jmy.18): mutation-style POST /verdicts/{verdict_id}/override — coerces ISO timestamp string to datetime, calls apply_override_to_verdict with pre_redacted=True (privacy applied once at sidecar boundary), returns 200 {id, status:"overridden"} / 404 verdict_not_found / 409 conflict / 422 validation_error / 400 decision_id_mismatch (path vs body decision_id mismatch guard)
-    store.py      # Unified SQLite store: Store class formally implements VerdictStore ABC (opensrm-jmy.18 B0); 10-table schema v1.5.0, WAL mode; VerdictStore methods: put(verdict), get(id)->Verdict|None, update_outcome(id, outcome, expected_status=None)->Verdict (CAS; raises KeyError/OutcomeStatusMismatch), query(VerdictFilter)->list[Verdict], by_lineage(id, direction)->list[Verdict]; accuracy() and expire() raise NotImplementedError (schema unification in opensrm-jmy.20)
-  tests/
-    test_health.py      # Async ASGI test: GET /health returns 200 {"status": "ok"}
-    test_api.py         # Full HTTP API test suite: TestHealth, TestPostVerdict, TestGetVerdicts (incl. time_range_filter_with_timezone_offset), TestLineage, TestOutcomeResolution, TestAssessments
-    test_api_cases.py       # Cases + change-freeze API: TestPriorityDerivation, TestPostCase, TestGetCases, TestCaseLease, TestCaseResolve, TestChangeFreezes
-    test_api_heartbeats.py      # Heartbeat + monitoring API: TestPostHeartbeat, TestGetHeartbeats, TestStuckActionRequests
-    test_api_component_state.py # Component state persistence API: TestPutComponentState (save, overwrite, invalid_body), TestGetComponentState (get_existing, get_nonexistent, empty_dict_roundtrip, roundtrip_preserves_state)
-    test_api_suppressions.py    # Suppressions API: TestPostSuppression (create_suppression, create_without_related_verdict, missing_component/reason/suppressed_verdict_id → 422), TestGetSuppressions (query_all, filter_by_component, filter_by_time_range, empty_result, suppression_contains_all_fields)
-    test_api_overrides.py       # Override handler (opensrm-jmy.18): 8 async tests — happy_path_returns_200_and_mutates_outcome, idempotent_reapply_returns_200, verdict_not_found_returns_404, decision_id_mismatch_returns_400, schema_failure_returns_422 (missing corrected_action), conflict_with_existing_returns_409, terminal_status_returns_422 (confirmed verdict), override_persists_to_real_sqlite_store (B3 — real Store not MemoryStore; verifies fresh read persistence + idempotent re-apply + CAS conflict); uses Store.put(Verdict) + Store.get(id) VerdictStore ABC methods; pre_redacted=True means reviewer stored plaintext in outcome.override.by
-    test_api_manifests.py   # Manifest catalogue API: TestGetManifests (list_all, expected_fields, slo_includes_judgment_type), TestGetManifest (get_existing, get_nonexistent → 404), TestManifestsReload (new/modified/deleted file detection, no_changes), TestCatalogueUnit (empty/nonexistent dir, invalid yaml skipped)
-    test_store.py           # Store test suite: schema, verdicts, lineage, cases, freezes, heartbeats, component state
-    test_store_verdictstore.py  # VerdictStore ABC compliance (opensrm-jmy.18 B0): TestStoreIsVerdictStore, TestPutAndGet, TestUpdateOutcomeUnconditional, TestUpdateOutcomeCAS (CAS success/mismatch/race), TestQuery (filter/limit), TestByLineage (up/down/both/unknown direction); all tests use real SQLite Store(tmp_path)
-    test_retention.py       # Retention test suite: TestVerdictRetention, TestAssessmentRetention, TestCaseRetention, TestChangeFreezeRetention, TestHeartbeatRetention, TestRekorAnchorsNeverPruned, TestRetentionGuards
-  tests/smoke/
-    __init__.py             # Package marker
-    test_imports.py         # Walks every module under nthlayer_core via pkgutil; asserts every __all__ symbol resolves
-    test_cli.py             # Asserts the nthlayer console script is on PATH and --help exits 0 with non-empty stdout
-  pyproject.toml    # name="nthlayer-core", version="1.0.0"; script: nthlayer → nthlayer_core.cli:main; deps: nthlayer-common, starlette, uvicorn, httpx
-```
+## Stack
 
-### HTTP API
+Python ≥3.11, `uv`-managed. Starlette + Uvicorn ASGI runtime.
 
-Env vars: `NTHLAYER_STORE_PATH` — path to SQLite db (default `nthlayer.db`); `NTHLAYER_MANIFESTS_DIR` — directory of OpenSRM manifest YAML files (optional). Override with `set_store(store)` / `set_catalogue(catalogue)` for tests.
+## Build / test / lint / run commands
 
-**Verdicts** (immutable — no PUT/PATCH):
+→ See `AGENTS.md`.
 
-| Method | Path | Response |
-|--------|------|----------|
-| `POST` | `/verdicts` | 201 `{id}` \| 400 `envelope_invalid` (malformed CE envelope, envelope_version=null) \| 422 `verdict_invalid` (missing id/type/created_at, envelope_version=null for raw; "1.0" for unwrapped envelope) \| 409 duplicate; `+00:00` timezone offset in `created_after`/`created_before` URL-safe (+ decoded as space handled) |
-| `GET` | `/verdicts` | list; query params: `service`, `type`, `created_after`, `created_before`, `limit` (default 100) |
-| `GET` | `/verdicts/{verdict_id}` | dict \| 404 not_found |
-| `GET` | `/verdicts/{verdict_id}/ancestors` | list; query param: `max_hops` |
-| `GET` | `/verdicts/{verdict_id}/descendants` | list |
-| `POST` | `/verdicts/{verdict_id}/outcome` | 201 `{id}` — creates NEW `outcome_resolution` verdict with `parent_ids=[original_id]`; original never mutated |
-| `POST` | `/verdicts/{verdict_id}/override` | 200 `{id, status:"overridden"}` — mutation-style; mutates original verdict's outcome in place (opensrm-jmy.18) \| 400 `decision_id_mismatch` \| 404 `verdict_not_found` \| 409 `conflict` (existing override differs) \| 422 `validation_error` (terminal status / schema failure) |
+## Hard rules
 
-**Assessments:**
+These are load-bearing — wrong-side mistakes either corrupt the
+verdict chain, leak SQLite internals, break the override CAS
+contract, or violate the "core is the only writer" invariant.
 
-| Method | Path | Response |
-|--------|------|----------|
-| `POST` | `/assessments` | 201 `{id}` \| 422 missing_fields (required: id, service, kind, created_at) \| 409 duplicate |
-| `GET` | `/assessments` | list; query params: `service`, `kind`, `limit` (default 100) |
+1. **Single writer.** The core process is the only thing that opens
+   the SQLite db. Workers and bench access state via the HTTP API.
+   Do not add direct-store access from other repos. Do not add a
+   second writer (e.g. a CLI tool that mutates verdicts) — if such
+   a tool is needed, route it through this API.
 
-**Cases:**
+2. **Verdicts are immutable; outcomes go through one of two paths.**
+   - **Lineage-style** (`POST /verdicts/{id}/outcome`) creates a NEW
+     `outcome_resolution` verdict with `parent_ids=[original_id]`;
+     the original is never mutated. This is the v1.5 canonical path.
+   - **Mutation-style** (`POST /verdicts/{id}/override`, opensrm-jmy.18)
+     mutates the original verdict's `outcome` field in place via
+     `Store.update_outcome` with CAS. Used by the override adapter
+     sidecar — never called from user code or other workers.
+   - Do not add a third path. Do not add `PUT/PATCH /verdicts/{id}`.
 
-| Method | Path | Response |
-|--------|------|----------|
-| `POST` | `/cases` | 201 `{id, priority}` \| 422 missing_fields (required: id, kind, created_at, underlying_verdict) \| 409 duplicate; priority explicit or derived from blast_radius + has_active_incident |
-| `GET` | `/cases` | list; query params: `state`, `priority`, `service`, `limit` (default 100) |
-| `GET` | `/cases/{case_id}` | dict \| 404 not_found; expired leases show state=pending |
-| `PUT` | `/cases/{case_id}/lease` | 200 `{leased, holder}` \| 409 lease_conflict \| 422 expires_at in past or missing \| 404 not_found |
-| `DELETE` | `/cases/{case_id}/lease` | 200 `{released}` \| 404 not_found |
-| `PUT` | `/cases/{case_id}/resolve` | 200 `{resolved, resolution_id}` \| 409 already_resolved \| 422 missing resolution_id \| 404 not_found |
+3. **CAS predicate treats missing-outcome as pending.** The
+   `update_outcome` SQL uses `IFNULL(json_extract(content,
+   '$.outcome.status'), 'pending')` so a verdict whose `content`
+   blob omits the `outcome` field accepts a CAS with
+   `expected_status='pending'`. This is pinned by
+   `test_store_verdictstore.py::test_cas_with_expected_pending_against_missing_outcome_succeeds`.
+   Do not rewrite the predicate to require an explicit
+   `outcome.status` field — that would break legacy verdict data.
 
-**Priority derivation** (`_derive_priority(blast_radius, has_active_incident)`):
-- `("production", True)` → P0; `("production", False)` → P1
-- `("staging", True)` → P1; `("staging", False)` → P2
-- dev / ephemeral / None → P3 (default); uses lookup dict, not regex
+4. **CloudEvents envelope auto-detect, two distinct error codes.**
+   Body with top-level `specversion` → unwrap envelope before
+   validation; without → raw dict (back-compat; v2 will require
+   envelope). On error:
+   - 400 `envelope_invalid` (cannot unwrap, `envelope_version=null`).
+   - 422 `record_invalid` (inner record fails validation,
+     `envelope_version=null` for raw or `"1.0"` for unwrapped).
+   Pinned in `test_api.py`. Do not collapse these to a single 4xx.
 
-**Change Freezes:**
+5. **Store errors do not leak SQLite internals to clients.**
+   `_store_error_response(handler, exc, **context)` logs the full
+   exception server-side via structlog (`core_store_error` event)
+   and returns generic `{"error": "internal_error"}` 500 to the
+   client (opensrm-9uow.1). `TestStoreErrorOpacity` (3 tests in
+   `test_api.py`) validates this. Do not surface SQLite messages
+   directly in responses — they leak schema and path info.
 
-| Method | Path | Response |
-|--------|------|----------|
-| `POST` | `/change-freezes` | 201 `{name}` \| 422 missing_fields or inverted range (active_until must be after active_from) \| 409 duplicate |
-| `GET` | `/change-freezes` | list of active freezes (active_from ≤ now ≤ active_until, not lifted) |
-| `PUT` | `/change-freezes/{freeze_name}/lift` | 200 `{lifted, name}` \| 422 missing lifted_by \| 404 not_found or already lifted |
+6. **Override handler applies privacy at the sidecar boundary.**
+   `post_verdict_override` calls `apply_override_to_verdict` with
+   `pre_redacted=True` — the override-adapter sidecar is the only
+   privacy boundary; core trusts the wire. Do not re-hash here. Do
+   not weaken to `pre_redacted=False` "just in case."
 
-**Heartbeats:**
+7. **`decision_id_mismatch` guard.** Path `verdict_id` and body
+   `decision_id` must match on `POST /verdicts/{id}/override` —
+   mismatch returns 400. Do not silently prefer one over the other.
 
-| Method | Path | Response |
-|--------|------|----------|
-| `POST` | `/heartbeats` | 200 `{ok: true}` \| 422 missing_fields (required: component, instance_id; optional: state dict); upserts by (component, instance_id) |
-| `GET` | `/heartbeats` | list with computed `health` ("healthy"\|"degraded") and `age_seconds`; query param: `threshold` (int seconds, default 30) |
+8. **Test discipline.** Tests use real `Store(tmp_path)`, not a
+   MemoryStore mock — same rule as the rest of the ecosystem
+   (see `feedback_shared_db_test`). Assertions on structured-data
+   primitives (response JSON fields, status codes, store-returned
+   records), not captured response text.
 
-**Component State:**
+9. **Retention has guards.** `run_retention` defaults:
+   verdicts/cases=365d, assessments/change_freezes/suppressions=90d,
+   heartbeats=1d. `rekor_anchors` never pruned. Active change
+   freezes always preserved. Verdicts only pruned when old AND no
+   younger descendant in lineage AND not referenced by a surviving
+   case. Pinned by `TestRetentionGuards`. Do not relax these
+   without an explicit spec change.
 
-| Method | Path | Response |
-|--------|------|----------|
-| `PUT` | `/component-state/{component}` | 200 `{ok: true, component}` — save processing state (cursor, hysteresis, dedup cache); workers call after each cycle for crash recovery |
-| `GET` | `/component-state/{component}` | 200 `{component, last_cursor, hysteresis_state, dedup_cache, ...}` \| 404 not_found — workers restore on startup to resume from last checkpoint |
+## Where to find detail
 
-**Suppressions:**
-
-| Method | Path | Response |
-|--------|------|----------|
-| `POST` | `/suppressions` | 201 `{id}` \| 422 missing_fields (required: component, reason, suppressed_verdict_id; optional: related_verdict_id, suppressed_at) |
-| `GET` | `/suppressions` | list; query params: `component`, `created_after`, `created_before`, `limit` (default 100) |
-
-**Manifests** (read from `ManifestCatalogue`, populated from `NTHLAYER_MANIFESTS_DIR`):
-
-| Method | Path | Response |
-|--------|------|----------|
-| `GET` | `/manifests` | list of all loaded manifests as dicts (name, team, tier, type, namespace, source_format, slos, dependencies, contracts) |
-| `GET` | `/manifests/{service_name}` | single manifest dict \| 404 not_found |
-| `POST` | `/manifests/-/reload` | 200 `{changed: [...], total: N}` — triggers `catalogue.poll()`, returns changed service names and new total count |
-
-**Monitoring:**
-
-| Method | Path | Response |
-|--------|------|----------|
-| `GET` | `/monitoring/stuck-action-requests` | `{count, stuck: [...]}` — action_request verdicts older than threshold with no corresponding case; query param: `threshold` (int seconds, default 60) |
-
-**Other:**
-
-- `GET /health` → `{"status": "ok"}` — liveness check
-
-**outcome_resolution verdict fields:** `id` (default `out-{original_id}`), `type="outcome_resolution"`, `service` (copied from original), `created_at` (now UTC), `parent_ids=[original_id]`, `chain_depth=original.chain_depth+1`, `pipeline_latency_ms`, `outcome_status` (default `"confirmed"`), `resolution`, `reasoning`.
-
-### CLI
-
-```bash
-nthlayer serve [--host 0.0.0.0] [--port 8000]   # start HTTP server
-nthlayer -V                                       # print version
-```
-
-### Store
-
-Unified SQLite store owned exclusively by the core process. Workers and bench access via the HTTP API — never directly.
-
-**Schema v1.5.0** — 10 tables (string IDs, JSON TEXT content):
-
-| Table | Purpose |
-|-------|---------|
-| `verdicts` | Immutable verdict records with lineage |
-| `assessments` | Component outputs that are not decisions |
-| `cases` | Bench domain model with lease management |
-| `change_freezes` | RBAC §7 change freeze documents |
-| `heartbeats` | Component liveness (upsert per instance) |
-| `component_state` | Persistent state across restarts (cursor, hysteresis, dedup cache) |
-| `suppressions` | Suppression audit trail (POST/GET API live; not deferred) |
-| `rekor_anchors` | Forward-compat for v2 Rekor anchoring (empty in v1.5) |
-| `lineage` | Pre-computed transitive closure of verdict ancestry |
-| `schema_meta` | Schema version tracking |
-
-**Design decisions:**
-- WAL mode + `PRAGMA synchronous=NORMAL` + `busy_timeout=5000` — concurrent reads without blocking writes
-- Thread-local connection pool — one connection per thread, safe for multi-threaded server
-- `BEGIN IMMEDIATE` for all writes — prevents write conflicts under concurrent load
-- Transitive lineage closure computed at write time via `INSERT OR IGNORE` — fast ancestor/descendant queries
-- Expired leases revert to pending in presentation layer (`_apply_effective_state`) — no DB write, avoids background sweep process
-- Retention: verdicts only pruned when old AND no younger descendant in lineage AND not referenced by a surviving case; `rekor_anchors` never pruned; active change freezes always preserved
-
-**Public API (`Store`):**
-- **VerdictStore ABC methods** (opensrm-jmy.18 B0 — used by `apply_override_to_verdict` and nthlayer-common callers):
-  - `put(verdict: Verdict) -> None` — serialises via `to_dict()` and writes; also populates lineage index
-  - `get(id: str) -> Verdict | None` — deserialises via `from_dict()`; returns `None` if not found
-  - `update_outcome(id, new_outcome, expected_status=None) -> Verdict` — CAS write; raises `KeyError` if verdict not found; raises `OutcomeStatusMismatch` if `expected_status` is set and doesn't match current status; returns updated `Verdict`. CAS predicate uses `IFNULL(json_extract(content, '$.outcome.status'), 'pending')` so a verdict whose `content` blob omits the `outcome` field entirely is treated as `status='pending'` and accepts a CAS with `expected_status='pending'` (locked by `test_store_verdictstore.py::test_cas_with_expected_pending_against_missing_outcome_succeeds`).
-  - `query(filter: VerdictFilter) -> list[Verdict]` — maps `subject_service`→service, `subject_type`→verdict_type, `from_time`/`to_time`→created_after/created_before, `limit` to SQL; post-filters producer_system, subject_agent, status, tags in Python (not expressible as Store SQL predicates against the content-blob schema)
-  - `by_lineage(id, direction) -> list[Verdict]` — direction: `"up"` (ancestors), `"down"` (descendants), `"both"`; raises `ValueError` on unknown direction
-  - `accuracy()` / `expire()` — raise `NotImplementedError` (schema unification tracked in opensrm-jmy.20)
-- `put_verdict(verdict)` → `str` — writes verdict + populates lineage index
-- `get_verdict(id)` → `dict | None`
-- `query_verdicts(*, service, verdict_type, created_after, created_before, limit=100)` → `list[dict]`
-- `ancestors_of(verdict_id, max_hops=None)` → `list[dict]` — ordered by hop distance
-- `descendants_of(verdict_id)` → `list[dict]`
-- `put_assessment / get_assessment / query_assessments`
-- `put_case(case)` → `str`; `get_case(id)` → `dict | None`; `query_cases(*, state, priority, service, limit=100)` → `list[dict]`
-- `acquire_lease(case_id, holder, expires_at)` → `bool` — atomic; acquirable if pending or lease expired
-- `release_lease(case_id)` → `bool`; `resolve_case(case_id, resolution_id)` → `bool`
-- `put_change_freeze / lift_change_freeze / get_active_freezes`
-- `put_heartbeat(component, instance_id, state=None)` — upsert by (component, instance_id); `get_heartbeats()` → raw rows; `get_heartbeats_with_health(degraded_threshold_seconds=30)` → rows with computed `health` and `age_seconds` fields
-- `get_stuck_action_requests(threshold_seconds=60)` → `list[dict]` — action_request verdicts older than cutoff with no case referencing them via `underlying_verdict`
-- `put_component_state / get_component_state` — JSON sub-fields (hysteresis_state, dedup_cache) auto-serialized; empty dicts preserved on roundtrip
-- `put_suppression(component, reason, suppressed_verdict_id, *, related_verdict_id=None, suppressed_at=None)` → `int` (row id); `query_suppressions(*, component=None, created_after=None, created_before=None, limit=100)` → `list[dict]`
-- `run_retention(retention=None)` → `dict[str, int]` — prune expired rows per policy; defaults: verdicts/cases=365d, assessments/change_freezes/suppressions=90d, heartbeats=1d; raises `ValueError` if any window < 1
-- `table_exists(name)` → `bool`
-- `close()` — releases thread-local connection
-<!-- END AUTO-MANAGED -->
-
-<!-- AUTO-MANAGED: build-commands -->
-## Commands
-
-```bash
-# Run tests
-uv run pytest
-
-# Install (editable)
-uv pip install -e .
-```
-<!-- END AUTO-MANAGED -->
-
-## Dependencies
-
-- `nthlayer-common>=0.1.8` (editable local, path `../nthlayer-common`) — shared utilities, verdict model
-- `starlette>=0.40` — ASGI web framework
-- `uvicorn>=0.30` — ASGI server
-- `httpx>=0.27` — HTTP client (also used in tests via `ASGITransport`)
-
-Dev: `pytest>=8.2`, `pytest-asyncio>=0.23` (`asyncio_mode = "auto"`), `httpx>=0.27`
-
-## Documentation
-
-- `README.md` — added 2026-04-28; project-level overview for GitHub and contributors
-
-## CI / Release pipeline
-
-nthlayer-core uses `googleapis/release-please-action@v4`. On every push to `main`, release-please inspects Conventional Commits and maintains a release PR that bumps `pyproject.toml` and appends `CHANGELOG.md`. Config lives in `release-please-config.json` (package type `python`, `changelog-sections` filter) and `.release-please-manifest.json` (current version anchor). Commit taxonomy: `feat`/`fix`/`perf`/`deps`/`refactor`/`docs` surface in the changelog; `chore`/`test`/`ci`/`build`/`style` are hidden. When the release PR is merged, release-please creates the GitHub release tag and `release.yml` fires.
-
-`release.yml` includes a Docker-based smoke gate inserted between `twine check` and the PyPI publish action. A `python:3.11-slim` container mounts `dist/` and `tests/smoke/` read-only, installs the freshly-built wheel plus pytest, and runs the smoke suite. Stale `__all__` exports, missing runtime deps, and broken entry points are caught before the wheel reaches PyPI. Failure blocks publish. See `tests/smoke/` for the suite (catalogued in the Architecture section above).
-
-**Known trigger issue:** `release.yml` fires on `release: published`. The `GITHUB_TOKEN`-cascade-block means release-please-created releases do not trigger `release.yml` automatically, so the tag `v1.1.0` created today did NOT auto-publish to PyPI. Remediation: pivot to `push: tags: ['v*']` trigger or configure release-please with a PAT. See bead `opensrm-pdoe` for triage.
-
-Dependabot config (`.github/dependabot.yml`) declares two ecosystems — `uv` for `pyproject.toml` + `uv.lock`, and `github-actions` for workflow files — both on a Monday-morning Europe/Dublin schedule. Sibling `nthlayer-*` packages and dev deps are each grouped into a single weekly PR. Auto-merge policy (`.github/workflows/dependabot-automerge.yml`): external runtime patch and dev patch/minor auto-merge; sibling packages and any major bump require review.
+- Source layout, HTTP endpoint reference (full path/method/response
+  matrix), store schema + design decisions, store public API, test
+  suite cross-reference: `docs/architecture.md`.
+- Build / test / lint / run / CI / release: `AGENTS.md`.
+- Override sidecar conventions (privacy boundary, fail-open, batch
+  cardinality): `nthlayer-override-adapter/CLAUDE.md`.
+- nthlayer-common shared model the core depends on:
+  `nthlayer-common/docs/architecture.md`.
+- CloudEvents envelope spec: NTHLAYER-TELEMETRY-ENVELOPE-v1 §3.
+- README: project-level overview (`README.md`).
+- Beads: `cd opensrm && bd ready --json`.
