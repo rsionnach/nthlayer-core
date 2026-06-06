@@ -1,3 +1,6 @@
+# Push-triggered CI gate. Closes the only ecosystem CI gap — previously
+# pytest only ran in release.yml's wheel-smoke (release-time, not push).
+# Bead: opensrm-5vuz.
 name: CI
 
 on:
@@ -5,6 +8,16 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+
+# Reference-architecture defaults for the ecosystem (opensrm-5vuz part 1):
+#   - cancel-in-progress so PR force-pushes don't pile up runs.
+#   - contents:read keeps the GITHUB_TOKEN scope to what tests need.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -35,7 +48,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
-      - run: uv python install 3.12
-      - run: uv sync --extra dev
-      - run: uv run ruff check src/ tests/
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --extra dev
+      # No --ignore E501: core's pyproject.toml has no [tool.ruff] section
+      # and inherits defaults that do not enable E501. Sibling
+      # nthlayer-common passes --ignore E501 against its own config; the
+      # invocation diverges deliberately, not by oversight.
+      - name: Run linting
+        run: uv run ruff check src/ tests/

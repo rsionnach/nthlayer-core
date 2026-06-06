@@ -38,6 +38,12 @@ nthlayer -V                                  # print version
 
 ## CI / release
 
+- **Push/PR gate** (`.github/workflows/ci.yml`, opensrm-5vuz): runs
+  `uv run pytest tests/` (matrix py3.11 + py3.12) and
+  `uv run ruff check src/ tests/` on every push and PR to `main`.
+  `concurrency: cancel-in-progress` + `permissions: contents:read`.
+  Closes the prior gap where pytest only fired at release time inside
+  the wheel-smoke gate.
 - `googleapis/release-please-action@v4`. Push to `main` inspects
   Conventional Commits and maintains a release PR that bumps
   `pyproject.toml` and appends `CHANGELOG.md`. Config:
