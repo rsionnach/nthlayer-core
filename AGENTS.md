@@ -28,6 +28,8 @@ nthlayer serve --host 0.0.0.0 --port 8000   # start the HTTP server
 nthlayer -V                                  # print version
 ```
 
+Ecosystem testing conventions: [../nthlayer/docs/testing.md](../nthlayer/docs/testing.md).
+
 ## Runtime configuration
 
 - `NTHLAYER_STORE_PATH` — path to SQLite db (default `nthlayer.db`).
