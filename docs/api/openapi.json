@@ -1,0 +1,78 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "NthLayer Core API",
+    "version": "1.6.0",
+    "description": "Tier-1 reliability-critical HTTP API: verdict store, case management, manifest catalogue, heartbeats, component state. Workers and bench access the store exclusively through these endpoints. Verdicts are immutable after creation; outcome resolution writes a new verdict referencing the original as parent."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Same-origin"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Liveness probe",
+        "description": "Returns 200 with a fixed payload as long as the ASGI app is running. Does not check store connectivity \u2014 for that, query any /verdicts route and rely on the 5xx contract.",
+        "operationId": "getHealth",
+        "tags": [
+          "meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "Server is running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    }
+                  }
+                },
+                "examples": {
+                  "ok": {
+                    "value": {
+                      "status": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable error code. Handlers raise a fixed vocabulary of codes documented per-endpoint. The internal_error code is used when the store layer raises an unexpected exception (opensrm-9uow.1)."
+          },
+          "detail": {
+            "type": "object",
+            "description": "Structured detail. Shape varies by error code and endpoint. Operators read structured server logs for the canonical diagnosis; clients use this for user-facing messages.",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
