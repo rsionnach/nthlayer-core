@@ -1,6 +1,14 @@
 # Push-triggered CI gate. Closes the only ecosystem CI gap — previously
 # pytest only ran in release.yml's wheel-smoke (release-time, not push).
 # Bead: opensrm-5vuz.
+#
+# Sibling-checkout pattern (added during tu04.1.1 — the first push to
+# main since the workflow landed): nthlayer-core depends on
+# nthlayer-common via a relative-path uv source
+# (`path = "../nthlayer-common"` in pyproject.toml's [tool.uv.sources]).
+# Both repos must be checked out as siblings so the path resolves the
+# same way it does locally. Mirrors the working pattern in
+# nthlayer-workers/.github/workflows/test.yml (opensrm-kx5x).
 name: CI
 
 on:
@@ -23,40 +31,67 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout nthlayer-core
+        uses: actions/checkout@v6
+        with:
+          path: nthlayer-core
+
+      - name: Checkout nthlayer-common (sibling)
+        uses: actions/checkout@v6
+        with:
+          repository: rsionnach/nthlayer-common
+          path: nthlayer-common
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-          cache-dependency-glob: "uv.lock"
+          cache-dependency-glob: "nthlayer-core/uv.lock"
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        working-directory: nthlayer-core
+        run: uv sync --extra dev --python ${{ matrix.python-version }}
 
       - name: Run tests
+        working-directory: nthlayer-core
         run: uv run pytest tests/ -v --tb=short -x
 
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout nthlayer-core
+        uses: actions/checkout@v6
+        with:
+          path: nthlayer-core
+
+      - name: Checkout nthlayer-common (sibling)
+        uses: actions/checkout@v6
+        with:
+          repository: rsionnach/nthlayer-common
+          path: nthlayer-common
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+
       - name: Set up Python
         run: uv python install 3.12
+
       - name: Install dependencies
+        working-directory: nthlayer-core
         run: uv sync --extra dev
+
       # No --ignore E501: core's pyproject.toml has no [tool.ruff] section
       # and inherits defaults that do not enable E501. Sibling
       # nthlayer-common passes --ignore E501 against its own config; the
       # invocation diverges deliberately, not by oversight.
       - name: Run linting
+        working-directory: nthlayer-core
         run: uv run ruff check src/ tests/
