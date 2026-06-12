@@ -114,8 +114,13 @@ PATHS: dict[str, dict] = {
                     "name": "limit",
                     "in": "query",
                     "required": False,
-                    "description": "Maximum number of assessments to return.",
-                    "schema": {"type": "integer", "default": 100, "minimum": 1},
+                    "description": (
+                        "Maximum number of assessments to return. "
+                        "``limit=0`` is accepted by the handler and "
+                        "returns an empty array (matches tu04.1.2 I1 "
+                        "fix). No server-side maximum is enforced."
+                    ),
+                    "schema": {"type": "integer", "default": 100, "minimum": 0},
                 },
             ],
             "responses": {
@@ -257,8 +262,13 @@ PATHS: dict[str, dict] = {
                     "name": "limit",
                     "in": "query",
                     "required": False,
-                    "description": "Maximum number of cases to return.",
-                    "schema": {"type": "integer", "default": 100, "minimum": 1},
+                    "description": (
+                        "Maximum number of cases to return. "
+                        "``limit=0`` is accepted by the handler and "
+                        "returns an empty array (matches tu04.1.2 I1 "
+                        "fix). No server-side maximum is enforced."
+                    ),
+                    "schema": {"type": "integer", "default": 100, "minimum": 0},
                 },
             ],
             "responses": {
