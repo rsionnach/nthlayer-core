@@ -19,13 +19,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from nthlayer_core._openapi import paths_health, paths_verdicts
+from nthlayer_core._openapi import (
+    paths_assessments_cases,
+    paths_health,
+    paths_verdicts,
+)
 
 # Aggregate per-group fragments. New phases append to this list.
 _FRAGMENTS = [
     paths_health,
     paths_verdicts,
-    # paths_assessments_cases,   # tu04.1.3
+    paths_assessments_cases,
     # paths_other,               # tu04.1.4
 ]
 
