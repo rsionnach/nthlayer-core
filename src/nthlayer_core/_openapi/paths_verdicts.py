@@ -25,16 +25,17 @@ PATHS: dict[str, dict] = {
         "post": {
             "summary": "Create a verdict",
             "description": (
-                "Creates a new immutable verdict. The request body is either "
-                "a raw verdict dict OR a CloudEvents v1.0 envelope (auto-"
-                "detected by the presence of a top-level ``specversion`` "
-                "field); envelopes are unwrapped before validation. Returns "
-                "400 ``envelope_invalid`` if an envelope cannot be unwrapped "
-                "and 422 ``record_invalid`` (a.k.a. ``verdict_invalid``) if "
-                "the inner record fails required-field validation. Duplicate "
-                "ids return 409 ``duplicate``. Verdicts are write-once; "
-                "subsequent resolution must use POST /verdicts/{id}/outcome "
-                "or POST /verdicts/{id}/override."
+                "Creates a new immutable verdict. The request body is "
+                "either a raw verdict dict OR a CloudEvents v1.0 envelope "
+                "(auto-detected by the presence of a top-level "
+                "``specversion`` field); envelopes are unwrapped before "
+                "validation. Returns 422 ``invalid_json`` for malformed JSON, "
+                "400 ``envelope_invalid`` if an envelope cannot be unwrapped, "
+                "and 422 ``verdict_invalid`` if the inner record fails "
+                "required-field validation. Duplicate ids return 409 "
+                "``duplicate``. Verdicts are write-once; subsequent "
+                "resolution must use POST /verdicts/{id}/outcome or "
+                "POST /verdicts/{id}/override."
             ),
             "operationId": "postVerdict",
             "tags": ["verdicts"],
@@ -43,10 +44,19 @@ PATHS: dict[str, dict] = {
                 "content": {
                     "application/json": {
                         "schema": {
-                            "oneOf": [
+                            "anyOf": [
                                 {"$ref": "#/components/schemas/Verdict"},
                                 {"$ref": "#/components/schemas/EventEnvelope"},
                             ],
+                            "description": (
+                                "anyOf rather than oneOf: the handler's "
+                                "auto-detect uses a non-discriminator sniff "
+                                "(presence of ``specversion``); an envelope "
+                                "payload may also nominally validate against "
+                                "Verdict due to ``additionalProperties: "
+                                "true``, so requiring exactly-one would "
+                                "produce false negatives."
+                            ),
                         },
                     },
                 },
@@ -68,8 +78,9 @@ PATHS: dict[str, dict] = {
                 },
                 "400": {
                     "description": (
-                        "Malformed JSON body or envelope_invalid "
-                        "(CloudEvents envelope could not be unwrapped)."
+                        "``envelope_invalid`` — CloudEvents envelope could "
+                        "not be unwrapped (missing specversion/type/source/"
+                        "id, or ``data`` is not a dict)."
                     ),
                     "content": {
                         "application/json": {
@@ -78,7 +89,7 @@ PATHS: dict[str, dict] = {
                     },
                 },
                 "409": {
-                    "description": "Duplicate verdict id already in the store.",
+                    "description": "``duplicate`` — verdict id already in the store.",
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -87,8 +98,11 @@ PATHS: dict[str, dict] = {
                 },
                 "422": {
                     "description": (
-                        "record_invalid — inner verdict record failed "
-                        "required-field validation (id, type, created_at)."
+                        "``invalid_json`` (malformed body / non-object) or "
+                        "``verdict_invalid`` (inner record missing required "
+                        "fields: id, type, created_at). The envelope path "
+                        "carries an ``envelope_version`` field on the error "
+                        "body to let callers distinguish raw vs unwrapped."
                     ),
                     "content": {
                         "application/json": {
@@ -98,8 +112,9 @@ PATHS: dict[str, dict] = {
                 },
                 "500": {
                     "description": (
-                        "Opaque internal_error. Store/SQLite messages are "
-                        "never surfaced to the client (opensrm-9uow.1)."
+                        "``internal_error`` — opaque store failure. "
+                        "Store/SQLite messages are never surfaced to the "
+                        "client (opensrm-9uow.1)."
                     ),
                     "content": {
                         "application/json": {
@@ -171,8 +186,11 @@ PATHS: dict[str, dict] = {
                         },
                     },
                 },
-                "400": {
-                    "description": "Invalid query parameter (e.g. non-integer limit).",
+                "422": {
+                    "description": (
+                        "``invalid_parameter`` — query parameter rejected "
+                        "(e.g. non-integer or negative ``limit``)."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -180,7 +198,7 @@ PATHS: dict[str, dict] = {
                     },
                 },
                 "500": {
-                    "description": "Opaque internal_error from the store layer.",
+                    "description": "``internal_error`` — opaque store failure.",
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -281,8 +299,11 @@ PATHS: dict[str, dict] = {
                         },
                     },
                 },
-                "400": {
-                    "description": "Invalid max_hops query parameter.",
+                "422": {
+                    "description": (
+                        "``invalid_parameter`` — ``max_hops`` query "
+                        "parameter rejected (non-integer or negative)."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -424,16 +445,10 @@ PATHS: dict[str, dict] = {
                         },
                     },
                 },
-                "400": {
-                    "description": "Malformed JSON body.",
-                    "content": {
-                        "application/json": {
-                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
-                        },
-                    },
-                },
                 "404": {
-                    "description": "Original verdict not found.",
+                    "description": (
+                        "``not_found`` — original verdict id is unknown."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -442,7 +457,19 @@ PATHS: dict[str, dict] = {
                 },
                 "409": {
                     "description": (
-                        "Duplicate id for the synthesized outcome verdict."
+                        "``duplicate`` — synthesized outcome verdict id is "
+                        "already in the store."
+                    ),
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+                "422": {
+                    "description": (
+                        "``invalid_json`` — request body is not a valid "
+                        "JSON object."
                     ),
                     "content": {
                         "application/json": {
@@ -451,7 +478,7 @@ PATHS: dict[str, dict] = {
                     },
                 },
                 "500": {
-                    "description": "Opaque internal_error from the store layer.",
+                    "description": "``internal_error`` — opaque store failure.",
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -555,8 +582,8 @@ PATHS: dict[str, dict] = {
                 },
                 "400": {
                     "description": (
-                        "Malformed body or decision_id_mismatch "
-                        "(path verdict_id != body decision_id)."
+                        "``decision_id_mismatch`` — path verdict_id != "
+                        "body decision_id."
                     ),
                     "content": {
                         "application/json": {
@@ -565,7 +592,10 @@ PATHS: dict[str, dict] = {
                     },
                 },
                 "404": {
-                    "description": "Verdict not found.",
+                    "description": (
+                        "``verdict_not_found`` — path verdict_id is "
+                        "unknown."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -574,8 +604,8 @@ PATHS: dict[str, dict] = {
                 },
                 "409": {
                     "description": (
-                        "Verdict already overridden — CAS predicate "
-                        "rejected the write."
+                        "``conflict`` — CAS predicate rejected the write "
+                        "(verdict already overridden)."
                     ),
                     "content": {
                         "application/json": {
@@ -585,8 +615,11 @@ PATHS: dict[str, dict] = {
                 },
                 "422": {
                     "description": (
-                        "Override event validation failed (e.g. invalid "
-                        "timestamp, missing required fields)."
+                        "``invalid_json`` (malformed body) or "
+                        "``validation_error`` (override event failed "
+                        "construction — bad timestamp, missing required "
+                        "fields, or fallthrough from ``apply_override_to_"
+                        "verdict``)."
                     ),
                     "content": {
                         "application/json": {
@@ -656,14 +689,40 @@ SCHEMAS: dict[str, dict] = {
                 "type": ["object", "null"],
                 "description": (
                     "Outcome metadata. Absent or null until resolution; "
-                    "set in place by POST /verdicts/{id}/override."
+                    "mutated in place by POST /verdicts/{id}/override (the "
+                    "shape is defined by ``apply_override_to_verdict`` in "
+                    "nthlayer-common). No enum is enforced server-side."
                 ),
-                "properties": {
-                    "status": {
-                        "type": "string",
-                        "enum": ["pending", "met", "missed", "overridden"],
-                    },
-                },
+                "additionalProperties": True,
+            },
+            "outcome_status": {
+                "type": "string",
+                "description": (
+                    "Top-level outcome status, set on outcome_resolution "
+                    "verdicts created by POST /verdicts/{id}/outcome. "
+                    "Defaults to ``confirmed`` when the request body omits "
+                    "it; otherwise pass-through from the body. No enum is "
+                    "enforced server-side."
+                ),
+            },
+            "resolution": {
+                "description": (
+                    "Operator-supplied resolution detail on "
+                    "outcome_resolution verdicts. Shape is caller-defined."
+                ),
+            },
+            "reasoning": {
+                "description": (
+                    "Operator-supplied free-form reasoning on "
+                    "outcome_resolution verdicts."
+                ),
+            },
+            "pipeline_latency_ms": {
+                "type": ["number", "null"],
+                "description": (
+                    "Optional pipeline-latency annotation. Pass-through "
+                    "from the outcome request body."
+                ),
             },
         },
         "additionalProperties": True,
