@@ -38,17 +38,14 @@ ARTEFACT_PATH = (
 )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Phase 1 (tu04.1.1) documents only /health. Routes for verdicts, "
-        "assessments, cases, change-freezes, heartbeats, manifests, monitoring, "
-        "suppressions, component-state remain undocumented until tu04.1.2/3/4 "
-        "close. This xfail flips to xpass — and the test becomes load-bearing — "
-        "when tu04.1 closes."
-    ),
-)
 def test_route_parity() -> None:
+    """Every Starlette route must appear in OPENAPI['paths'] and vice versa.
+
+    Load-bearing as of tu04.1.4 close — Phases 1-4 of tu04.1 have all
+    landed, so the parity gap is now empty. Future routes added to
+    server.py without a matching paths_*.py fragment fail this test in
+    CI.
+    """
     spec = _spec_path_method_pairs()
     routes = _route_spec_pairs()
     assert spec == routes, (

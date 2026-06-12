@@ -22,15 +22,16 @@ from typing import Any
 from nthlayer_core._openapi import (
     paths_assessments_cases,
     paths_health,
+    paths_other,
     paths_verdicts,
 )
 
-# Aggregate per-group fragments. New phases append to this list.
+# Aggregate per-group fragments. Add new groups by appending here.
 _FRAGMENTS = [
     paths_health,
     paths_verdicts,
     paths_assessments_cases,
-    # paths_other,               # tu04.1.4
+    paths_other,
 ]
 
 

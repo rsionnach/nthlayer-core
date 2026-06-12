@@ -51,6 +51,2076 @@
           }
         }
       }
+    },
+    "/verdicts": {
+      "post": {
+        "summary": "Create a verdict",
+        "description": "Creates a new immutable verdict. The request body is either a raw verdict dict OR a CloudEvents v1.0 envelope (auto-detected by the presence of a top-level ``specversion`` field); envelopes are unwrapped before validation. Returns 400 ``envelope_invalid`` if an envelope cannot be unwrapped and 422 ``record_invalid`` (a.k.a. ``verdict_invalid``) if the inner record fails required-field validation. Duplicate ids return 409 ``duplicate``. Verdicts are write-once; subsequent resolution must use POST /verdicts/{id}/outcome or POST /verdicts/{id}/override.",
+        "operationId": "postVerdict",
+        "tags": [
+          "verdicts"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Verdict"
+                  },
+                  {
+                    "$ref": "#/components/schemas/EventEnvelope"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Verdict created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON body or envelope_invalid (CloudEvents envelope could not be unwrapped).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate verdict id already in the store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "record_invalid \u2014 inner verdict record failed required-field validation (id, type, created_at).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Opaque internal_error. Store/SQLite messages are never surfaced to the client (opensrm-9uow.1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Query verdicts",
+        "description": "Returns an array of verdict records matching the supplied filters. All filters are optional; with no filters the store returns the most recent ``limit`` verdicts. Time filters use ISO-8601 timestamps.",
+        "operationId": "getVerdicts",
+        "tags": [
+          "verdicts"
+        ],
+        "parameters": [
+          {
+            "name": "service",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by service name (exact match)."
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by verdict type (e.g. slo_status, drift_signal, outcome_resolution)."
+          },
+          {
+            "name": "created_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Inclusive lower bound on created_at."
+          },
+          {
+            "name": "created_before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Exclusive upper bound on created_at."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "minimum": 1
+            },
+            "description": "Maximum number of records to return."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of verdict records (possibly empty).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Verdict"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameter (e.g. non-integer limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Opaque internal_error from the store layer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verdicts/{verdict_id}": {
+      "get": {
+        "summary": "Get a verdict by id",
+        "description": "Returns the single verdict record with the given id. Verdicts are immutable so the returned shape is stable across reads. Returns 404 if the id is unknown.",
+        "operationId": "getVerdictById",
+        "tags": [
+          "verdicts"
+        ],
+        "parameters": [
+          {
+            "name": "verdict_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Unique verdict id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The verdict record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Verdict"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No verdict with the given id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Opaque internal_error from the store layer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verdicts/{verdict_id}/ancestors": {
+      "get": {
+        "summary": "Get verdict ancestors",
+        "description": "Returns the ancestors of a verdict by walking the ``parent_ids`` chain upward via the lineage index. The optional ``max_hops`` query parameter caps traversal depth (0 = unlimited).",
+        "operationId": "getVerdictAncestors",
+        "tags": [
+          "verdicts"
+        ],
+        "parameters": [
+          {
+            "name": "verdict_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Verdict id whose ancestors are wanted."
+          },
+          {
+            "name": "max_hops",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Maximum hops to traverse. Omit (or set to 0) for unlimited."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of ancestor verdict records (possibly empty).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Verdict"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid max_hops query parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Opaque internal_error from the store layer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verdicts/{verdict_id}/descendants": {
+      "get": {
+        "summary": "Get verdict descendants",
+        "description": "Returns the descendants of a verdict by walking the lineage index downward (verdicts whose ``parent_ids`` transitively include this id).",
+        "operationId": "getVerdictDescendants",
+        "tags": [
+          "verdicts"
+        ],
+        "parameters": [
+          {
+            "name": "verdict_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Verdict id whose descendants are wanted."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of descendant verdict records (possibly empty).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Verdict"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Opaque internal_error from the store layer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verdicts/{verdict_id}/outcome": {
+      "post": {
+        "summary": "Resolve a verdict's outcome (lineage-style)",
+        "description": "Creates a NEW verdict with ``type='outcome_resolution'`` and ``parent_ids=[original_id]``. The original verdict is never mutated \u2014 this is the v1.5 canonical resolution path. The new verdict id defaults to ``out-<original_id>`` if not supplied. Returns 404 if the original verdict does not exist; 409 ``duplicate`` if the synthesized outcome id is already taken.",
+        "operationId": "postVerdictOutcome",
+        "tags": [
+          "verdicts"
+        ],
+        "parameters": [
+          {
+            "name": "verdict_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Id of the original verdict being resolved."
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Optional explicit id for the new outcome_resolution verdict. Defaults to ``out-<original_id>``."
+                  },
+                  "outcome_status": {
+                    "type": "string",
+                    "description": "Outcome status label. Defaults to 'confirmed'."
+                  },
+                  "resolution": {
+                    "type": "string",
+                    "description": "Free-text resolution summary."
+                  },
+                  "reasoning": {
+                    "type": "string",
+                    "description": "Free-text reasoning trace."
+                  },
+                  "pipeline_latency_ms": {
+                    "type": "number",
+                    "description": "Optional end-to-end pipeline latency for telemetry."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Outcome_resolution verdict created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original verdict not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate id for the synthesized outcome verdict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Opaque internal_error from the store layer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verdicts/{verdict_id}/override": {
+      "post": {
+        "summary": "Apply an operator override (mutation-style)",
+        "description": "Mutation-style override path (opensrm-jmy.18): mutates the original verdict's ``outcome`` field in place via CAS in ``Store.update_outcome``. The single exception to verdict immutability and the ONLY endpoint that writes back to an existing verdict. Intended for invocation by the override-adapter sidecar exclusively \u2014 the sidecar is the privacy boundary, so core trusts the wire (``pre_redacted=True``). The body's ``decision_id`` MUST match the path's ``verdict_id``; mismatch returns 400 ``decision_id_mismatch``. Returns 409 ``conflict`` if the verdict is already overridden.",
+        "operationId": "postVerdictOverride",
+        "tags": [
+          "verdicts"
+        ],
+        "parameters": [
+          {
+            "name": "verdict_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Id of the verdict to override. Must match the body's decision_id."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "decision_id",
+                  "timestamp"
+                ],
+                "properties": {
+                  "decision_id": {
+                    "type": "string",
+                    "description": "Verdict id being overridden. Must equal the path verdict_id."
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "tz-aware ISO-8601 timestamp of the override event."
+                  },
+                  "actor": {
+                    "type": "string",
+                    "description": "Operator identifier (already redacted by the sidecar)."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Operator-supplied rationale (already redacted by the sidecar)."
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Override applied successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "status"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "overridden"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body or decision_id_mismatch (path verdict_id != body decision_id).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Verdict not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Verdict already overridden \u2014 CAS predicate rejected the write.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Override event validation failed (e.g. invalid timestamp, missing required fields).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Opaque internal_error from the store layer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessments": {
+      "post": {
+        "summary": "Create an assessment",
+        "description": "Persists an assessment record produced by a worker module (e.g. slo_status, drift_signal). Accepts either a CloudEvents v1.0 envelope (auto-detected via top-level ``specversion``) or a raw assessment dict. Returns 400 ``envelope_invalid`` when the envelope cannot be unwrapped, 422 ``assessment_invalid`` when the inner record is missing required fields, and 409 ``duplicate`` when the assessment id already exists.",
+        "operationId": "postAssessment",
+        "tags": [
+          "assessments"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Assessment"
+                  },
+                  {
+                    "$ref": "#/components/schemas/EventEnvelope"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Assessment created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Envelope could not be unwrapped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An assessment with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Inner record failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque per opensrm-9uow.1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Query assessments",
+        "description": "Returns assessments matching the optional filters. Filters compose with AND semantics; omitted filters do not constrain the result set. The response is a JSON array ordered by the store's default ordering (newest first).",
+        "operationId": "getAssessments",
+        "tags": [
+          "assessments"
+        ],
+        "parameters": [
+          {
+            "name": "service",
+            "in": "query",
+            "required": false,
+            "description": "Filter assessments by the service they apply to.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Filter by assessment kind (e.g. slo_status, drift_signal).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Maximum number of assessments to return.",
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of matching assessments.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Assessment"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid query parameter (e.g. non-integer limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque per opensrm-9uow.1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cases": {
+      "post": {
+        "summary": "Create a case",
+        "description": "Creates a new operator-facing case from an underlying verdict. Requires ``id``, ``kind``, ``created_at``, and ``underlying_verdict``. When ``priority`` is not supplied it is derived from ``blast_radius`` and ``has_active_incident`` (production+incident=P0, production=P1, staging+incident=P1, staging=P2, anything else=P3). Returns 409 ``duplicate`` when the case id already exists.",
+        "operationId": "postCase",
+        "tags": [
+          "cases"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Case created. Response echoes id and final priority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "priority"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "priority": {
+                      "type": "string",
+                      "enum": [
+                        "P0",
+                        "P1",
+                        "P2",
+                        "P3"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A case with this id already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Missing required fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque per opensrm-9uow.1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Query cases",
+        "description": "Returns cases matching the optional state, priority, and service filters. Used by the bench TUI to drive the operator queue. Filters compose with AND semantics.",
+        "operationId": "getCases",
+        "tags": [
+          "cases"
+        ],
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "description": "Filter by case state (pending, leased, resolved).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "leased",
+                "resolved"
+              ]
+            }
+          },
+          {
+            "name": "priority",
+            "in": "query",
+            "required": false,
+            "description": "Filter by derived or explicit priority.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "P0",
+                "P1",
+                "P2",
+                "P3"
+              ]
+            }
+          },
+          {
+            "name": "service",
+            "in": "query",
+            "required": false,
+            "description": "Filter cases by the service they concern.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Maximum number of cases to return.",
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of matching cases.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Case"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid query parameter (e.g. non-integer limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque per opensrm-9uow.1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cases/{case_id}": {
+      "get": {
+        "summary": "Fetch a single case by id",
+        "description": "Returns the full case record including lease state and resolution metadata if any. Responds 404 ``not_found`` for unknown ids.",
+        "operationId": "getCaseById",
+        "tags": [
+          "cases"
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "description": "The case identifier.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requested case.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Case"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No case with this id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque per opensrm-9uow.1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cases/{case_id}/lease": {
+      "put": {
+        "summary": "Acquire a case lease",
+        "description": "Atomically claims ownership of the case for the named holder until ``expires_at``. Exactly one concurrent caller succeeds; the loser receives 409 ``lease_conflict``. ``expires_at`` must be a future ISO-8601 timestamp (naive timestamps are treated as UTC). Returns 404 if the case does not exist.",
+        "operationId": "putCaseLease",
+        "tags": [
+          "cases"
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "description": "The case identifier.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseLeaseAcquire"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lease acquired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "leased",
+                    "holder"
+                  ],
+                  "properties": {
+                    "leased": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "holder": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No case with this id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Case is already leased by another operator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Missing fields or invalid ``expires_at``.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque per opensrm-9uow.1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Release a case lease",
+        "description": "Releases any lease currently held on the case \u2014 idempotent and intentionally admin-level (any caller may release; identity is not checked). Returns 200 whether or not a lease was held, and 404 only when the case itself does not exist.",
+        "operationId": "deleteCaseLease",
+        "tags": [
+          "cases"
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "description": "The case identifier.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lease released (idempotent).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "released"
+                  ],
+                  "properties": {
+                    "released": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No case with this id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque per opensrm-9uow.1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cases/{case_id}/resolve": {
+      "put": {
+        "summary": "Resolve a case",
+        "description": "Atomically transitions the case to ``resolved`` while binding the supplied ``resolution_id`` (a verdict id) as the closing decision. The store guards against double-resolve: a second attempt returns 409 ``already_resolved`` with the previously bound resolution id.",
+        "operationId": "putCaseResolve",
+        "tags": [
+          "cases"
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "description": "The case identifier.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "resolution_id"
+                ],
+                "properties": {
+                  "resolution_id": {
+                    "type": "string",
+                    "description": "Verdict id representing the resolution decision."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Case resolved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "resolved",
+                    "resolution_id"
+                  ],
+                  "properties": {
+                    "resolved": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "resolution_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No case with this id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Case has already been resolved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Missing ``resolution_id``.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque per opensrm-9uow.1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/change-freezes": {
+      "post": {
+        "summary": "Declare a change freeze",
+        "description": "Creates a named window during which automated responses are blocked. The body must include name, declared_by, declared_at, active_from, and active_until; active_until must strictly follow active_from. Duplicate names return 409.",
+        "operationId": "postChangeFreeze",
+        "tags": [
+          "change-freezes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "declared_by",
+                  "declared_at",
+                  "active_from",
+                  "active_until"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "declared_by": {
+                    "type": "string"
+                  },
+                  "declared_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "active_from": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "active_until": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Change freeze created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "name"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A change freeze with this name already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Missing required fields or invalid temporal ordering.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque to client).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List active change freezes",
+        "description": "Returns the set of change freezes that are currently active according to their active_from / active_until window. Lifted freezes are excluded.",
+        "operationId": "getChangeFreezes",
+        "tags": [
+          "change-freezes"
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of active change freezes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChangeFreeze"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque to client).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/change-freezes/{freeze_name}/lift": {
+      "put": {
+        "summary": "Lift a change freeze early",
+        "description": "Cancels an active change freeze before its scheduled active_until. The body must include lifted_by. Returns 404 if no freeze with that name exists.",
+        "operationId": "putChangeFreezeLift",
+        "tags": [
+          "change-freezes"
+        ],
+        "parameters": [
+          {
+            "name": "freeze_name",
+            "in": "path",
+            "required": true,
+            "description": "Name of the change freeze to lift.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "lifted_by"
+                ],
+                "properties": {
+                  "lifted_by": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Change freeze lifted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "lifted",
+                    "name"
+                  ],
+                  "properties": {
+                    "lifted": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No change freeze with this name.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Missing lifted_by field.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque to client).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/heartbeats": {
+      "post": {
+        "summary": "Record a component heartbeat",
+        "description": "Workers POST a liveness signal identifying the component and instance. The optional state field records arbitrary worker-specific status. Always returns 200 on success.",
+        "operationId": "postHeartbeat",
+        "tags": [
+          "heartbeats"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "component",
+                  "instance_id"
+                ],
+                "properties": {
+                  "component": {
+                    "type": "string"
+                  },
+                  "instance_id": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "nullable": true
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Heartbeat recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Missing component or instance_id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque to client).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List heartbeats with computed health",
+        "description": "Returns all known heartbeats with a derived health field. A component whose most recent heartbeat is older than the threshold (default 30 seconds, override via ?threshold=) is marked degraded.",
+        "operationId": "getHeartbeats",
+        "tags": [
+          "heartbeats"
+        ],
+        "parameters": [
+          {
+            "name": "threshold",
+            "in": "query",
+            "required": false,
+            "description": "Age in seconds beyond which a heartbeat is treated as degraded.",
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of heartbeats with health classification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Heartbeat"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid threshold parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque to client).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/manifests": {
+      "get": {
+        "summary": "List loaded service manifests",
+        "description": "Returns every OpenSRM v2 service manifest currently loaded by the catalogue. Manifest authorship happens on disk \u2014 there is no POST /manifests endpoint.",
+        "operationId": "getManifests",
+        "tags": [
+          "manifests"
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of loaded manifests.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Manifest"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/manifests/-/reload": {
+      "post": {
+        "summary": "Reload manifests from disk",
+        "description": "Re-polls the catalogue source directory for added, removed, or changed manifest files and returns the list of services that changed. The path segment '-' is a literal sentinel chosen because no service is named '-'.",
+        "operationId": "postManifestsReload",
+        "tags": [
+          "manifests"
+        ],
+        "responses": {
+          "200": {
+            "description": "Reload completed; reports changed services and total count.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "changed",
+                    "total"
+                  ],
+                  "properties": {
+                    "changed": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/manifests/{service}": {
+      "get": {
+        "summary": "Get a single manifest",
+        "description": "Returns the manifest for the named service from the in-memory catalogue. Returns 404 if no manifest with this service name is loaded.",
+        "operationId": "getManifest",
+        "tags": [
+          "manifests"
+        ],
+        "parameters": [
+          {
+            "name": "service",
+            "in": "path",
+            "required": true,
+            "description": "Service name from the manifest's metadata.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Manifest for the requested service.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Manifest"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No manifest with this service name is loaded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/suppressions": {
+      "post": {
+        "summary": "Record a suppressed verdict",
+        "description": "Workers report verdicts they declined to act on (active incident, dedup window, hysteresis, etc.) so the suppression decisions are auditable. Required fields: component, reason, suppressed_verdict_id.",
+        "operationId": "postSuppression",
+        "tags": [
+          "suppressions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "component",
+                  "reason",
+                  "suppressed_verdict_id"
+                ],
+                "properties": {
+                  "component": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "suppressed_verdict_id": {
+                    "type": "string"
+                  },
+                  "related_verdict_id": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "suppressed_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Suppression recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Missing required field(s).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque to client).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Query suppressions",
+        "description": "Returns suppression records filtered by component and/or creation time range. Default limit is 100; supply ?limit= to override.",
+        "operationId": "getSuppressions",
+        "tags": [
+          "suppressions"
+        ],
+        "parameters": [
+          {
+            "name": "component",
+            "in": "query",
+            "required": false,
+            "description": "Restrict to suppressions reported by this component.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "created_after",
+            "in": "query",
+            "required": false,
+            "description": "ISO-8601 lower bound on suppression timestamp.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "created_before",
+            "in": "query",
+            "required": false,
+            "description": "ISO-8601 upper bound on suppression timestamp.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Maximum number of records to return.",
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of suppression records.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Suppression"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid limit parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque to client).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/component-state/{component}": {
+      "put": {
+        "summary": "Persist component state",
+        "description": "Workers PUT an opaque JSON state blob (cursor, hysteresis, dedup cache, etc.) after each cycle so they can resume after crash. The body shape is worker-defined; core treats it as opaque.",
+        "operationId": "putComponentState",
+        "tags": [
+          "component-state"
+        ],
+        "parameters": [
+          {
+            "name": "component",
+            "in": "path",
+            "required": true,
+            "description": "Component name identifying the worker.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "State persisted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "component"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "component": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque to client).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Retrieve component state",
+        "description": "Workers GET their previously-persisted state blob to resume from the last checkpoint. Returns 404 if no state has ever been written for this component.",
+        "operationId": "getComponentState",
+        "tags": [
+          "component-state"
+        ],
+        "parameters": [
+          {
+            "name": "component",
+            "in": "path",
+            "required": true,
+            "description": "Component name identifying the worker.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The opaque state blob previously persisted by the component.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No state recorded for this component.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque to client).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/monitoring/stuck-action-requests": {
+      "get": {
+        "summary": "List stuck action_request verdicts",
+        "description": "Diagnostic endpoint for the respond worker: returns action_request verdicts older than the threshold (default 60 seconds, override via ?threshold=) that still have no corresponding case. A non-empty list signals a silent failure in case creation.",
+        "operationId": "getStuckActionRequests",
+        "tags": [
+          "monitoring"
+        ],
+        "parameters": [
+          {
+            "name": "threshold",
+            "in": "query",
+            "required": false,
+            "description": "Age in seconds above which an unresolved action_request is considered stuck.",
+            "schema": {
+              "type": "integer",
+              "default": 60,
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Count and list of stuck action_request verdicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "count",
+                    "stuck"
+                  ],
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    },
+                    "stuck": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StuckActionRequest"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid threshold parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Store operation failed (opaque to client).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -72,6 +2142,478 @@
           }
         },
         "additionalProperties": false
+      },
+      "Verdict": {
+        "type": "object",
+        "description": "Immutable verdict record. Additional implementation-specific fields are permitted (the store preserves the JSON blob verbatim).",
+        "required": [
+          "id",
+          "type",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Globally unique verdict id."
+          },
+          "type": {
+            "type": "string",
+            "description": "Verdict type discriminator. Common values include ``slo_status``, ``drift_signal``, ``outcome_resolution``.",
+            "examples": [
+              "slo_status",
+              "drift_signal",
+              "outcome_resolution"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO-8601 creation timestamp (tz-aware)."
+          },
+          "service": {
+            "type": "string",
+            "description": "Service name this verdict pertains to."
+          },
+          "parent_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Lineage parents. Populated on derived verdicts (e.g. outcome_resolution); null/absent on roots."
+          },
+          "chain_depth": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Depth in the lineage chain (0 = root)."
+          },
+          "outcome": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Outcome metadata. Absent or null until resolution; set in place by POST /verdicts/{id}/override.",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "met",
+                  "missed",
+                  "overridden"
+                ]
+              }
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "EventEnvelope": {
+        "type": "object",
+        "description": "CloudEvents v1.0 envelope. POST /verdicts (and POST /assessments) auto-detect this shape via the top-level ``specversion`` field and unwrap before validating the inner record carried in ``data``.",
+        "required": [
+          "specversion",
+          "type",
+          "source",
+          "id",
+          "data"
+        ],
+        "properties": {
+          "specversion": {
+            "type": "string",
+            "enum": [
+              "1.0"
+            ],
+            "description": "CloudEvents spec version. Must be '1.0'."
+          },
+          "type": {
+            "type": "string",
+            "description": "Event type (e.g. ``com.nthlayer.verdict.v1``)."
+          },
+          "source": {
+            "type": "string",
+            "description": "URI identifying the event producer."
+          },
+          "id": {
+            "type": "string",
+            "description": "Envelope id (independent of the inner record id)."
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Optional envelope emission timestamp."
+          },
+          "datacontenttype": {
+            "type": "string",
+            "description": "Optional content type of ``data``. Typically ``application/json``."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Verdict"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Assessment": {
+        "type": "object",
+        "description": "An assessment record produced by a worker module \u2014 a typed observation about a service's health (e.g. SLO status, drift signal). Inner shape varies by ``kind``; per-kind detail lives in the open-ended ``data`` field.",
+        "required": [
+          "id",
+          "kind",
+          "service",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique assessment identifier."
+          },
+          "kind": {
+            "type": "string",
+            "description": "Assessment type discriminator.",
+            "examples": [
+              "slo_status",
+              "drift_signal"
+            ]
+          },
+          "service": {
+            "type": "string",
+            "description": "Service the assessment applies to."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO-8601 creation timestamp."
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Kind-specific assessment payload."
+          }
+        }
+      },
+      "Case": {
+        "type": "object",
+        "description": "An operator-facing investigation derived from an underlying verdict. Cases progress through ``pending`` \u2192 ``leased`` \u2192 ``resolved``. A lease names the operator currently working the case; ``null`` means no operator holds it.",
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "created_at",
+          "underlying_verdict"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique case identifier."
+          },
+          "kind": {
+            "type": "string",
+            "description": "Case kind (e.g. correlation_alert)."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "leased",
+              "resolved"
+            ],
+            "description": "Lifecycle state."
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "P0",
+              "P1",
+              "P2",
+              "P3"
+            ],
+            "description": "Derived from blast_radius \u00d7 incident context if not explicitly supplied at creation."
+          },
+          "service": {
+            "type": "string",
+            "description": "Service the case concerns."
+          },
+          "blast_radius": {
+            "type": "string",
+            "description": "Deployment scope (production, staging, dev, ephemeral)."
+          },
+          "has_active_incident": {
+            "type": "boolean",
+            "description": "Whether an active incident was in flight at create time."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO-8601 creation timestamp."
+          },
+          "underlying_verdict": {
+            "type": "string",
+            "description": "Verdict id that originated this case."
+          },
+          "resolution_id": {
+            "type": "string",
+            "description": "Verdict id bound when the case was resolved (resolved state only)."
+          },
+          "lease": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CaseLease"
+              }
+            ],
+            "description": "Current lease, or null when unleased."
+          }
+        }
+      },
+      "CaseLease": {
+        "type": "object",
+        "description": "An exclusive claim by an operator on a case, bounded by an expiry timestamp. Acquired via PUT /cases/{id}/lease and released via DELETE on the same path.",
+        "required": [
+          "holder",
+          "expires_at"
+        ],
+        "properties": {
+          "holder": {
+            "type": "string",
+            "description": "Operator identifier currently holding the lease."
+          },
+          "claimed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the lease was acquired."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the lease lapses if not refreshed."
+          }
+        }
+      },
+      "CaseCreate": {
+        "type": "object",
+        "description": "Request body for POST /cases. ``priority`` is optional \u2014 when omitted it is derived from ``blast_radius`` and ``has_active_incident``.",
+        "required": [
+          "id",
+          "kind",
+          "created_at",
+          "underlying_verdict"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "underlying_verdict": {
+            "type": "string",
+            "description": "Verdict id that originated this case."
+          },
+          "service": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "P0",
+              "P1",
+              "P2",
+              "P3"
+            ],
+            "description": "Optional explicit priority; otherwise derived."
+          },
+          "blast_radius": {
+            "type": "string",
+            "description": "Deployment scope used for priority derivation."
+          },
+          "has_active_incident": {
+            "type": "boolean",
+            "description": "Incident context used for priority derivation.",
+            "default": false
+          }
+        },
+        "additionalProperties": true
+      },
+      "CaseLeaseAcquire": {
+        "type": "object",
+        "description": "Request body for PUT /cases/{id}/lease.",
+        "required": [
+          "holder",
+          "expires_at"
+        ],
+        "properties": {
+          "holder": {
+            "type": "string",
+            "description": "Operator identifier acquiring the lease."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Future ISO-8601 timestamp at which the lease lapses. Naive timestamps are treated as UTC."
+          }
+        }
+      },
+      "ChangeFreeze": {
+        "type": "object",
+        "description": "A named window during which automated responses are blocked.",
+        "required": [
+          "name",
+          "reason",
+          "starts_at",
+          "active"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Heartbeat": {
+        "type": "object",
+        "description": "Liveness signal from a worker component.",
+        "required": [
+          "component",
+          "timestamp"
+        ],
+        "properties": {
+          "component": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "Manifest": {
+        "type": "object",
+        "description": "An OpenSRM v2 service manifest loaded into the catalogue.",
+        "required": [
+          "service",
+          "spec",
+          "loaded_at"
+        ],
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "spec": {
+            "type": "object",
+            "description": "The OpenSRM v2 manifest body, opaque to core.",
+            "additionalProperties": true
+          },
+          "loaded_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Suppression": {
+        "type": "object",
+        "description": "An operator- or worker-recorded 'ignore this verdict pattern' decision.",
+        "required": [
+          "id",
+          "pattern",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "ComponentState": {
+        "type": "object",
+        "description": "Opaque per-worker persistence blob used for crash recovery.",
+        "required": [
+          "component",
+          "updated_at"
+        ],
+        "properties": {
+          "component": {
+            "type": "string"
+          },
+          "state": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": true
+      },
+      "StuckActionRequest": {
+        "type": "object",
+        "description": "An action_request verdict whose deadline elapsed without a response.",
+        "required": [
+          "verdict_id",
+          "deadline",
+          "age_seconds"
+        ],
+        "properties": {
+          "verdict_id": {
+            "type": "string"
+          },
+          "deadline": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "age_seconds": {
+            "type": "integer"
+          },
+          "service": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": true
       }
     }
   }

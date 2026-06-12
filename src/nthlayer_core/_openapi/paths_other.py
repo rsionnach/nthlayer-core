@@ -1,0 +1,783 @@
+"""OpenAPI spec fragment for change-freezes, heartbeats, manifests, suppressions, component-state, and monitoring.
+
+Authored under opensrm-tu04.1.4 — covers the 13 remaining routes outside
+the verdicts/cases/assessments and health/openapi groups.
+"""
+from __future__ import annotations
+
+PATHS: dict[str, dict] = {
+    "/change-freezes": {
+        "post": {
+            "summary": "Declare a change freeze",
+            "description": (
+                "Creates a named window during which automated responses are "
+                "blocked. The body must include name, declared_by, declared_at, "
+                "active_from, and active_until; active_until must strictly "
+                "follow active_from. Duplicate names return 409."
+            ),
+            "operationId": "postChangeFreeze",
+            "tags": ["change-freezes"],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "required": [
+                                "name",
+                                "declared_by",
+                                "declared_at",
+                                "active_from",
+                                "active_until",
+                            ],
+                            "properties": {
+                                "name": {"type": "string"},
+                                "declared_by": {"type": "string"},
+                                "declared_at": {"type": "string", "format": "date-time"},
+                                "active_from": {"type": "string", "format": "date-time"},
+                                "active_until": {"type": "string", "format": "date-time"},
+                                "reason": {"type": "string"},
+                            },
+                            "additionalProperties": True,
+                        },
+                    },
+                },
+            },
+            "responses": {
+                "201": {
+                    "description": "Change freeze created.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["name"],
+                                "properties": {"name": {"type": "string"}},
+                            },
+                        },
+                    },
+                },
+                "409": {
+                    "description": "A change freeze with this name already exists.",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+                "422": {
+                    "description": "Missing required fields or invalid temporal ordering.",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+                "500": {
+                    "description": "Store operation failed (opaque to client).",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+            },
+        },
+        "get": {
+            "summary": "List active change freezes",
+            "description": (
+                "Returns the set of change freezes that are currently active "
+                "according to their active_from / active_until window. Lifted "
+                "freezes are excluded."
+            ),
+            "operationId": "getChangeFreezes",
+            "tags": ["change-freezes"],
+            "responses": {
+                "200": {
+                    "description": "Array of active change freezes.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "array",
+                                "items": {"$ref": "#/components/schemas/ChangeFreeze"},
+                            },
+                        },
+                    },
+                },
+                "500": {
+                    "description": "Store operation failed (opaque to client).",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "/change-freezes/{freeze_name}/lift": {
+        "put": {
+            "summary": "Lift a change freeze early",
+            "description": (
+                "Cancels an active change freeze before its scheduled "
+                "active_until. The body must include lifted_by. Returns 404 if "
+                "no freeze with that name exists."
+            ),
+            "operationId": "putChangeFreezeLift",
+            "tags": ["change-freezes"],
+            "parameters": [
+                {
+                    "name": "freeze_name",
+                    "in": "path",
+                    "required": True,
+                    "description": "Name of the change freeze to lift.",
+                    "schema": {"type": "string"},
+                },
+            ],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "required": ["lifted_by"],
+                            "properties": {"lifted_by": {"type": "string"}},
+                        },
+                    },
+                },
+            },
+            "responses": {
+                "200": {
+                    "description": "Change freeze lifted.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["lifted", "name"],
+                                "properties": {
+                                    "lifted": {"type": "boolean"},
+                                    "name": {"type": "string"},
+                                },
+                            },
+                        },
+                    },
+                },
+                "404": {
+                    "description": "No change freeze with this name.",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+                "422": {
+                    "description": "Missing lifted_by field.",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+                "500": {
+                    "description": "Store operation failed (opaque to client).",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "/heartbeats": {
+        "post": {
+            "summary": "Record a component heartbeat",
+            "description": (
+                "Workers POST a liveness signal identifying the component and "
+                "instance. The optional state field records arbitrary worker-"
+                "specific status. Always returns 200 on success."
+            ),
+            "operationId": "postHeartbeat",
+            "tags": ["heartbeats"],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "required": ["component", "instance_id"],
+                            "properties": {
+                                "component": {"type": "string"},
+                                "instance_id": {"type": "string"},
+                                "state": {
+                                    "type": "object",
+                                    "additionalProperties": True,
+                                    "nullable": True,
+                                },
+                            },
+                            "additionalProperties": True,
+                        },
+                    },
+                },
+            },
+            "responses": {
+                "200": {
+                    "description": "Heartbeat recorded.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["ok"],
+                                "properties": {"ok": {"type": "boolean"}},
+                            },
+                        },
+                    },
+                },
+                "422": {
+                    "description": "Missing component or instance_id.",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+                "500": {
+                    "description": "Store operation failed (opaque to client).",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+            },
+        },
+        "get": {
+            "summary": "List heartbeats with computed health",
+            "description": (
+                "Returns all known heartbeats with a derived health field. A "
+                "component whose most recent heartbeat is older than the "
+                "threshold (default 30 seconds, override via ?threshold=) is "
+                "marked degraded."
+            ),
+            "operationId": "getHeartbeats",
+            "tags": ["heartbeats"],
+            "parameters": [
+                {
+                    "name": "threshold",
+                    "in": "query",
+                    "required": False,
+                    "description": "Age in seconds beyond which a heartbeat is treated as degraded.",
+                    "schema": {"type": "integer", "default": 30, "minimum": 0},
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "Array of heartbeats with health classification.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "array",
+                                "items": {"$ref": "#/components/schemas/Heartbeat"},
+                            },
+                        },
+                    },
+                },
+                "400": {
+                    "description": "Invalid threshold parameter.",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+                "500": {
+                    "description": "Store operation failed (opaque to client).",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "/manifests": {
+        "get": {
+            "summary": "List loaded service manifests",
+            "description": (
+                "Returns every OpenSRM v2 service manifest currently loaded by "
+                "the catalogue. Manifest authorship happens on disk — there is "
+                "no POST /manifests endpoint."
+            ),
+            "operationId": "getManifests",
+            "tags": ["manifests"],
+            "responses": {
+                "200": {
+                    "description": "Array of loaded manifests.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "array",
+                                "items": {"$ref": "#/components/schemas/Manifest"},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "/manifests/-/reload": {
+        "post": {
+            "summary": "Reload manifests from disk",
+            "description": (
+                "Re-polls the catalogue source directory for added, removed, or "
+                "changed manifest files and returns the list of services that "
+                "changed. The path segment '-' is a literal sentinel chosen "
+                "because no service is named '-'."
+            ),
+            "operationId": "postManifestsReload",
+            "tags": ["manifests"],
+            "responses": {
+                "200": {
+                    "description": "Reload completed; reports changed services and total count.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["changed", "total"],
+                                "properties": {
+                                    "changed": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                    },
+                                    "total": {"type": "integer"},
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "/manifests/{service}": {
+        "get": {
+            "summary": "Get a single manifest",
+            "description": (
+                "Returns the manifest for the named service from the in-memory "
+                "catalogue. Returns 404 if no manifest with this service name "
+                "is loaded."
+            ),
+            "operationId": "getManifest",
+            "tags": ["manifests"],
+            "parameters": [
+                {
+                    "name": "service",
+                    "in": "path",
+                    "required": True,
+                    "description": "Service name from the manifest's metadata.",
+                    "schema": {"type": "string"},
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "Manifest for the requested service.",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/Manifest"},
+                        },
+                    },
+                },
+                "404": {
+                    "description": "No manifest with this service name is loaded.",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "/suppressions": {
+        "post": {
+            "summary": "Record a suppressed verdict",
+            "description": (
+                "Workers report verdicts they declined to act on (active "
+                "incident, dedup window, hysteresis, etc.) so the suppression "
+                "decisions are auditable. Required fields: component, reason, "
+                "suppressed_verdict_id."
+            ),
+            "operationId": "postSuppression",
+            "tags": ["suppressions"],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "required": ["component", "reason", "suppressed_verdict_id"],
+                            "properties": {
+                                "component": {"type": "string"},
+                                "reason": {"type": "string"},
+                                "suppressed_verdict_id": {"type": "string"},
+                                "related_verdict_id": {"type": "string", "nullable": True},
+                                "suppressed_at": {"type": "string", "format": "date-time"},
+                            },
+                            "additionalProperties": True,
+                        },
+                    },
+                },
+            },
+            "responses": {
+                "201": {
+                    "description": "Suppression recorded.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["id"],
+                                "properties": {"id": {"type": "string"}},
+                            },
+                        },
+                    },
+                },
+                "422": {
+                    "description": "Missing required field(s).",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+                "500": {
+                    "description": "Store operation failed (opaque to client).",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+            },
+        },
+        "get": {
+            "summary": "Query suppressions",
+            "description": (
+                "Returns suppression records filtered by component and/or "
+                "creation time range. Default limit is 100; supply ?limit= to "
+                "override."
+            ),
+            "operationId": "getSuppressions",
+            "tags": ["suppressions"],
+            "parameters": [
+                {
+                    "name": "component",
+                    "in": "query",
+                    "required": False,
+                    "description": "Restrict to suppressions reported by this component.",
+                    "schema": {"type": "string"},
+                },
+                {
+                    "name": "created_after",
+                    "in": "query",
+                    "required": False,
+                    "description": "ISO-8601 lower bound on suppression timestamp.",
+                    "schema": {"type": "string", "format": "date-time"},
+                },
+                {
+                    "name": "created_before",
+                    "in": "query",
+                    "required": False,
+                    "description": "ISO-8601 upper bound on suppression timestamp.",
+                    "schema": {"type": "string", "format": "date-time"},
+                },
+                {
+                    "name": "limit",
+                    "in": "query",
+                    "required": False,
+                    "description": "Maximum number of records to return.",
+                    "schema": {"type": "integer", "default": 100, "minimum": 1},
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "Array of suppression records.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "array",
+                                "items": {"$ref": "#/components/schemas/Suppression"},
+                            },
+                        },
+                    },
+                },
+                "400": {
+                    "description": "Invalid limit parameter.",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+                "500": {
+                    "description": "Store operation failed (opaque to client).",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "/component-state/{component}": {
+        "put": {
+            "summary": "Persist component state",
+            "description": (
+                "Workers PUT an opaque JSON state blob (cursor, hysteresis, "
+                "dedup cache, etc.) after each cycle so they can resume after "
+                "crash. The body shape is worker-defined; core treats it as "
+                "opaque."
+            ),
+            "operationId": "putComponentState",
+            "tags": ["component-state"],
+            "parameters": [
+                {
+                    "name": "component",
+                    "in": "path",
+                    "required": True,
+                    "description": "Component name identifying the worker.",
+                    "schema": {"type": "string"},
+                },
+            ],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": True,
+                        },
+                    },
+                },
+            },
+            "responses": {
+                "200": {
+                    "description": "State persisted.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["ok", "component"],
+                                "properties": {
+                                    "ok": {"type": "boolean"},
+                                    "component": {"type": "string"},
+                                },
+                            },
+                        },
+                    },
+                },
+                "500": {
+                    "description": "Store operation failed (opaque to client).",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+            },
+        },
+        "get": {
+            "summary": "Retrieve component state",
+            "description": (
+                "Workers GET their previously-persisted state blob to resume "
+                "from the last checkpoint. Returns 404 if no state has ever "
+                "been written for this component."
+            ),
+            "operationId": "getComponentState",
+            "tags": ["component-state"],
+            "parameters": [
+                {
+                    "name": "component",
+                    "in": "path",
+                    "required": True,
+                    "description": "Component name identifying the worker.",
+                    "schema": {"type": "string"},
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "The opaque state blob previously persisted by the component.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": True,
+                            },
+                        },
+                    },
+                },
+                "404": {
+                    "description": "No state recorded for this component.",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+                "500": {
+                    "description": "Store operation failed (opaque to client).",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "/monitoring/stuck-action-requests": {
+        "get": {
+            "summary": "List stuck action_request verdicts",
+            "description": (
+                "Diagnostic endpoint for the respond worker: returns "
+                "action_request verdicts older than the threshold (default 60 "
+                "seconds, override via ?threshold=) that still have no "
+                "corresponding case. A non-empty list signals a silent failure "
+                "in case creation."
+            ),
+            "operationId": "getStuckActionRequests",
+            "tags": ["monitoring"],
+            "parameters": [
+                {
+                    "name": "threshold",
+                    "in": "query",
+                    "required": False,
+                    "description": "Age in seconds above which an unresolved action_request is considered stuck.",
+                    "schema": {"type": "integer", "default": 60, "minimum": 0},
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "Count and list of stuck action_request verdicts.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["count", "stuck"],
+                                "properties": {
+                                    "count": {"type": "integer"},
+                                    "stuck": {
+                                        "type": "array",
+                                        "items": {"$ref": "#/components/schemas/StuckActionRequest"},
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                "400": {
+                    "description": "Invalid threshold parameter.",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+                "500": {
+                    "description": "Store operation failed (opaque to client).",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
+
+SCHEMAS: dict[str, dict] = {
+    "ChangeFreeze": {
+        "type": "object",
+        "description": "A named window during which automated responses are blocked.",
+        "required": ["name", "reason", "starts_at", "active"],
+        "properties": {
+            "name": {"type": "string"},
+            "reason": {"type": "string"},
+            "starts_at": {"type": "string", "format": "date-time"},
+            "ends_at": {"type": "string", "format": "date-time", "nullable": True},
+            "active": {"type": "boolean"},
+        },
+        "additionalProperties": True,
+    },
+    "Heartbeat": {
+        "type": "object",
+        "description": "Liveness signal from a worker component.",
+        "required": ["component", "timestamp"],
+        "properties": {
+            "component": {"type": "string"},
+            "timestamp": {"type": "string", "format": "date-time"},
+            "metadata": {
+                "type": "object",
+                "additionalProperties": True,
+                "nullable": True,
+            },
+        },
+        "additionalProperties": True,
+    },
+    "Manifest": {
+        "type": "object",
+        "description": "An OpenSRM v2 service manifest loaded into the catalogue.",
+        "required": ["service", "spec", "loaded_at"],
+        "properties": {
+            "service": {"type": "string"},
+            "spec": {
+                "type": "object",
+                "description": "The OpenSRM v2 manifest body, opaque to core.",
+                "additionalProperties": True,
+            },
+            "loaded_at": {"type": "string", "format": "date-time"},
+        },
+        "additionalProperties": True,
+    },
+    "Suppression": {
+        "type": "object",
+        "description": "An operator- or worker-recorded 'ignore this verdict pattern' decision.",
+        "required": ["id", "pattern", "created_at"],
+        "properties": {
+            "id": {"type": "string"},
+            "pattern": {
+                "type": "object",
+                "additionalProperties": True,
+            },
+            "created_at": {"type": "string", "format": "date-time"},
+            "expires_at": {"type": "string", "format": "date-time", "nullable": True},
+        },
+        "additionalProperties": True,
+    },
+    "ComponentState": {
+        "type": "object",
+        "description": "Opaque per-worker persistence blob used for crash recovery.",
+        "required": ["component", "updated_at"],
+        "properties": {
+            "component": {"type": "string"},
+            "state": {
+                "type": "object",
+                "additionalProperties": True,
+            },
+            "updated_at": {"type": "string", "format": "date-time"},
+        },
+        "additionalProperties": True,
+    },
+    "StuckActionRequest": {
+        "type": "object",
+        "description": "An action_request verdict whose deadline elapsed without a response.",
+        "required": ["verdict_id", "deadline", "age_seconds"],
+        "properties": {
+            "verdict_id": {"type": "string"},
+            "deadline": {"type": "string", "format": "date-time"},
+            "age_seconds": {"type": "integer"},
+            "service": {"type": "string", "nullable": True},
+        },
+        "additionalProperties": True,
+    },
+}
