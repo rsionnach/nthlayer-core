@@ -192,9 +192,9 @@
             "schema": {
               "type": "integer",
               "default": 100,
-              "minimum": 1
+              "minimum": 0
             },
-            "description": "Maximum number of records to return."
+            "description": "Maximum number of records to return. ``limit=0`` is accepted by the handler and returns an empty array (the underlying store passes the value to SQL ``LIMIT 0``). No server-side maximum is enforced."
           }
         ],
         "responses": {
@@ -2220,7 +2220,7 @@
       },
       "EventEnvelope": {
         "type": "object",
-        "description": "CloudEvents v1.0 envelope. POST /verdicts (and POST /assessments) auto-detect this shape via the top-level ``specversion`` field and unwrap before validating the inner record carried in ``data``.",
+        "description": "CloudEvents v1.0 envelope. POST /verdicts and POST /assessments auto-detect this shape via the top-level ``specversion`` field and unwrap before validating the inner record carried in ``data``. The envelope is reused across routes; the shape of ``data`` is determined by the wrapping route (Verdict for /verdicts, Assessment for /assessments) and validated by that route's handler, not by this schema.",
         "required": [
           "specversion",
           "type",
@@ -2258,7 +2258,9 @@
             "description": "Optional content type of ``data``. Typically ``application/json``."
           },
           "data": {
-            "$ref": "#/components/schemas/Verdict"
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Inner record. Type depends on the wrapping route \u2014 Verdict for /verdicts, Assessment for /assessments. Validated by the route handler after unwrap; not constrained at the envelope schema layer."
           }
         },
         "additionalProperties": true

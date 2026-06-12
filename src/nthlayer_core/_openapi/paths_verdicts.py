@@ -170,8 +170,14 @@ PATHS: dict[str, dict] = {
                     "name": "limit",
                     "in": "query",
                     "required": False,
-                    "schema": {"type": "integer", "default": 100, "minimum": 1},
-                    "description": "Maximum number of records to return.",
+                    "schema": {"type": "integer", "default": 100, "minimum": 0},
+                    "description": (
+                        "Maximum number of records to return. "
+                        "``limit=0`` is accepted by the handler and "
+                        "returns an empty array (the underlying store "
+                        "passes the value to SQL ``LIMIT 0``). No "
+                        "server-side maximum is enforced."
+                    ),
                 },
             ],
             "responses": {
@@ -730,10 +736,14 @@ SCHEMAS: dict[str, dict] = {
     "EventEnvelope": {
         "type": "object",
         "description": (
-            "CloudEvents v1.0 envelope. POST /verdicts (and POST "
-            "/assessments) auto-detect this shape via the top-level "
+            "CloudEvents v1.0 envelope. POST /verdicts and POST "
+            "/assessments auto-detect this shape via the top-level "
             "``specversion`` field and unwrap before validating the "
-            "inner record carried in ``data``."
+            "inner record carried in ``data``. The envelope is reused "
+            "across routes; the shape of ``data`` is determined by the "
+            "wrapping route (Verdict for /verdicts, Assessment for "
+            "/assessments) and validated by that route's handler, not "
+            "by this schema."
         ),
         "required": ["specversion", "type", "source", "id", "data"],
         "properties": {
@@ -767,7 +777,15 @@ SCHEMAS: dict[str, dict] = {
                 ),
             },
             "data": {
-                "$ref": "#/components/schemas/Verdict",
+                "type": "object",
+                "additionalProperties": True,
+                "description": (
+                    "Inner record. Type depends on the wrapping route — "
+                    "Verdict for /verdicts, Assessment for "
+                    "/assessments. Validated by the route handler "
+                    "after unwrap; not constrained at the envelope "
+                    "schema layer."
+                ),
             },
         },
         "additionalProperties": True,
