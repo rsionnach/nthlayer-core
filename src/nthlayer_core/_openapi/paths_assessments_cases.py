@@ -28,10 +28,21 @@ PATHS: dict[str, dict] = {
                 "content": {
                     "application/json": {
                         "schema": {
-                            "oneOf": [
+                            "anyOf": [
                                 {"$ref": "#/components/schemas/Assessment"},
                                 {"$ref": "#/components/schemas/EventEnvelope"},
                             ],
+                            "description": (
+                                "anyOf rather than oneOf (mirrors "
+                                "POST /verdicts): the handler's auto-"
+                                "detect uses a non-discriminator sniff "
+                                "(presence of ``specversion``); an "
+                                "envelope payload may also nominally "
+                                "validate against Assessment due to "
+                                "``additionalProperties: true``, so "
+                                "requiring exactly-one would produce "
+                                "false negatives."
+                            ),
                         },
                     },
                 },
@@ -615,8 +626,10 @@ SCHEMAS: dict[str, dict] = {
         "type": "object",
         "description": (
             "An operator-facing investigation derived from an underlying "
-            "verdict. Cases progress through ``pending`` → ``leased`` → "
-            "``resolved``. A lease names the operator currently working the "
+            "verdict. Cases progress through ``pending`` → (optionally "
+            "``leased``) → ``resolved``. The lease step is not required: "
+            "PUT /cases/{id}/resolve accepts a case in ``pending`` state "
+            "directly. A lease names the operator currently working the "
             "case; ``null`` means no operator holds it."
         ),
         "required": ["id", "kind", "state", "created_at", "underlying_verdict"],
