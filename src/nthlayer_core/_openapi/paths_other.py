@@ -2,6 +2,10 @@
 
 Authored under opensrm-tu04.1.4 — covers the 13 remaining routes outside
 the verdicts/cases/assessments and health/openapi groups.
+
+Contributes 6 component schemas:
+  - ChangeFreeze, Heartbeat, Manifest, Suppression,
+    ComponentState, StuckActionRequest.
 """
 from __future__ import annotations
 
@@ -243,7 +247,10 @@ PATHS: dict[str, dict] = {
                     },
                 },
                 "422": {
-                    "description": "Missing component or instance_id.",
+                    "description": (
+                        "``missing_fields`` — request body missing "
+                        "``component`` or ``instance_id``."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -293,8 +300,8 @@ PATHS: dict[str, dict] = {
                 },
                 "422": {
                     "description": (
-                        "``invalid_parameter`` — query parameter rejected "
-                        "(e.g. non-integer or negative ``limit``)."
+                        "``invalid_parameter`` — ``threshold`` query "
+                        "parameter rejected (non-integer or negative)."
                     ),
                     "content": {
                         "application/json": {
@@ -454,7 +461,10 @@ PATHS: dict[str, dict] = {
                     },
                 },
                 "422": {
-                    "description": "Missing required field(s).",
+                    "description": (
+                        "``missing_fields`` — request body missing one "
+                        "of the required POST /suppressions fields."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -693,8 +703,8 @@ PATHS: dict[str, dict] = {
                 },
                 "422": {
                     "description": (
-                        "``invalid_parameter`` — query parameter rejected "
-                        "(e.g. non-integer or negative ``limit``)."
+                        "``invalid_parameter`` — ``threshold`` query "
+                        "parameter rejected (non-integer or negative)."
                     ),
                     "content": {
                         "application/json": {
