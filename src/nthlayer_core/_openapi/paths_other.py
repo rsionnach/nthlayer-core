@@ -172,7 +172,14 @@ PATHS: dict[str, dict] = {
                     },
                 },
                 "404": {
-                    "description": "No change freeze with this name.",
+                    "description": (
+                        "``not_found`` — no change freeze with this "
+                        "name, OR the named freeze has already been "
+                        "lifted. Lift is not idempotent on the wire: "
+                        "``Store.lift_change_freeze`` only matches "
+                        "rows where ``lifted_at IS NULL``, so the "
+                        "second call 404s rather than no-opping."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -455,7 +462,7 @@ PATHS: dict[str, dict] = {
                             "schema": {
                                 "type": "object",
                                 "required": ["id"],
-                                "properties": {"id": {"type": "string"}},
+                                "properties": {"id": {"type": "integer"}},
                             },
                         },
                     },
@@ -502,15 +509,26 @@ PATHS: dict[str, dict] = {
                     "name": "created_after",
                     "in": "query",
                     "required": False,
-                    "description": "ISO-8601 lower bound on suppression timestamp.",
-                    "schema": {"type": "string", "format": "date-time"},
+                    "description": (
+                        "Lower bound on suppression timestamp. Passed "
+                        "verbatim to SQL string comparison; the handler "
+                        "does NOT parse or validate ISO format, so a "
+                        "malformed value silently degrades to a "
+                        "lexicographic string compare. Send ISO-8601 "
+                        "in UTC for stable ordering."
+                    ),
+                    "schema": {"type": "string"},
                 },
                 {
                     "name": "created_before",
                     "in": "query",
                     "required": False,
-                    "description": "ISO-8601 upper bound on suppression timestamp.",
-                    "schema": {"type": "string", "format": "date-time"},
+                    "description": (
+                        "Upper bound on suppression timestamp. Same "
+                        "verbatim-passthrough semantics as "
+                        "``created_after`` — no ISO validation."
+                    ),
+                    "schema": {"type": "string"},
                 },
                 {
                     "name": "limit",
