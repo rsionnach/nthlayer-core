@@ -65,7 +65,13 @@ PATHS: dict[str, dict] = {
                     },
                 },
                 "422": {
-                    "description": "Missing required fields or invalid temporal ordering.",
+                    "description": (
+                        "``missing_fields`` — required body field absent; or "
+                        "``invalid_parameter`` — ``active_from`` / "
+                        "``active_until`` not valid ISO timestamps, or "
+                        "``active_until`` is not strictly after "
+                        "``active_from``."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -170,7 +176,11 @@ PATHS: dict[str, dict] = {
                     },
                 },
                 "422": {
-                    "description": "Missing lifted_by field.",
+                    "description": (
+                        "``missing_fields`` — ``lifted_by`` missing, empty, "
+                        "or ``null`` (the handler treats all three "
+                        "identically)."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -281,8 +291,11 @@ PATHS: dict[str, dict] = {
                         },
                     },
                 },
-                "400": {
-                    "description": "Invalid threshold parameter.",
+                "422": {
+                    "description": (
+                        "``invalid_parameter`` — query parameter rejected "
+                        "(e.g. non-integer or negative ``limit``)."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -493,8 +506,12 @@ PATHS: dict[str, dict] = {
                     "name": "limit",
                     "in": "query",
                     "required": False,
-                    "description": "Maximum number of records to return.",
-                    "schema": {"type": "integer", "default": 100, "minimum": 1},
+                    "description": (
+                        "Maximum number of records to return. ``limit=0`` is "
+                        "accepted and returns an empty array; negative values "
+                        "are rejected by the handler."
+                    ),
+                    "schema": {"type": "integer", "default": 100, "minimum": 0},
                 },
             ],
             "responses": {
@@ -509,8 +526,11 @@ PATHS: dict[str, dict] = {
                         },
                     },
                 },
-                "400": {
-                    "description": "Invalid limit parameter.",
+                "422": {
+                    "description": (
+                        "``invalid_parameter`` — query parameter rejected "
+                        "(e.g. non-integer or negative ``limit``)."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -605,13 +625,10 @@ PATHS: dict[str, dict] = {
             ],
             "responses": {
                 "200": {
-                    "description": "The opaque state blob previously persisted by the component.",
+                    "description": "The component_state row previously persisted by the component.",
                     "content": {
                         "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "additionalProperties": True,
-                            },
+                            "schema": {"$ref": "#/components/schemas/ComponentState"},
                         },
                     },
                 },
@@ -674,8 +691,11 @@ PATHS: dict[str, dict] = {
                         },
                     },
                 },
-                "400": {
-                    "description": "Invalid threshold parameter.",
+                "422": {
+                    "description": (
+                        "``invalid_parameter`` — query parameter rejected "
+                        "(e.g. non-integer or negative ``limit``)."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
@@ -698,25 +718,172 @@ PATHS: dict[str, dict] = {
 SCHEMAS: dict[str, dict] = {
     "ChangeFreeze": {
         "type": "object",
-        "description": "A named window during which automated responses are blocked.",
-        "required": ["name", "reason", "starts_at", "active"],
+        "description": (
+            "A named window during which automated responses are blocked. "
+            "``get_active_freezes`` returns the original POST body verbatim "
+            "(stored in the ``content`` column), so the response shape is "
+            "the request shape — required fields below mirror the handler's "
+            "validation in ``post_change_freeze``."
+        ),
+        "required": [
+            "name",
+            "declared_by",
+            "declared_at",
+            "active_from",
+            "active_until",
+        ],
         "properties": {
             "name": {"type": "string"},
+            "declared_by": {"type": "string"},
+            "declared_at": {"type": "string", "format": "date-time"},
+            "active_from": {"type": "string", "format": "date-time"},
+            "active_until": {"type": "string", "format": "date-time"},
             "reason": {"type": "string"},
-            "starts_at": {"type": "string", "format": "date-time"},
-            "ends_at": {"type": "string", "format": "date-time", "nullable": True},
-            "active": {"type": "boolean"},
         },
         "additionalProperties": True,
     },
     "Heartbeat": {
         "type": "object",
-        "description": "Liveness signal from a worker component.",
-        "required": ["component", "timestamp"],
+        "description": (
+            "A heartbeat row enriched with derived ``health`` and "
+            "``age_seconds`` fields by "
+            "``Store.get_heartbeats_with_health``. The derivation against "
+            "the configured threshold is the entire purpose of this "
+            "endpoint."
+        ),
+        "required": [
+            "component",
+            "instance_id",
+            "last_seen",
+            "health",
+            "age_seconds",
+        ],
         "properties": {
             "component": {"type": "string"},
-            "timestamp": {"type": "string", "format": "date-time"},
-            "metadata": {
+            "instance_id": {"type": "string"},
+            "last_seen": {"type": "string", "format": "date-time"},
+            "state": {
+                "type": "object",
+                "additionalProperties": True,
+                "nullable": True,
+                "description": "Opaque worker-supplied state from the POST body, or null.",
+            },
+            "health": {
+                "type": "string",
+                "enum": ["healthy", "degraded"],
+                "description": (
+                    "``degraded`` when ``age_seconds`` exceeds the "
+                    "``threshold`` query parameter (default 30)."
+                ),
+            },
+            "age_seconds": {
+                "type": "number",
+                "description": "Seconds since ``last_seen``, rounded to one decimal.",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "Manifest": {
+        "type": "object",
+        "description": (
+            "An OpenSRM v2 service manifest serialised by "
+            "``catalogue.manifest_to_dict``. The shape is flat — there is "
+            "no nested ``spec`` wrapper — and ``slos`` / ``dependencies`` "
+            "are always present (possibly empty)."
+        ),
+        "required": [
+            "name",
+            "team",
+            "tier",
+            "type",
+            "namespace",
+            "source_format",
+            "slos",
+            "dependencies",
+        ],
+        "properties": {
+            "name": {"type": "string"},
+            "team": {"type": "string"},
+            "tier": {"type": "string"},
+            "type": {"type": "string"},
+            "namespace": {"type": "string"},
+            "source_format": {"type": "string"},
+            "description": {"type": "string"},
+            "labels": {
+                "type": "object",
+                "additionalProperties": {"type": "string"},
+            },
+            "slos": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            },
+            "dependencies": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            },
+            "contracts": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            },
+        },
+        "additionalProperties": True,
+    },
+    "Suppression": {
+        "type": "object",
+        "description": (
+            "An audit row recorded when a worker declined to act on a "
+            "verdict (active incident, dedup window, hysteresis, etc.). "
+            "Shape matches the ``suppressions`` table columns returned by "
+            "``Store.query_suppressions`` (``SELECT *``)."
+        ),
+        "required": [
+            "id",
+            "component",
+            "reason",
+            "suppressed_verdict_id",
+            "suppressed_at",
+        ],
+        "properties": {
+            "id": {
+                "type": "integer",
+                "description": "Auto-increment row id from the suppressions table.",
+            },
+            "component": {"type": "string"},
+            "reason": {"type": "string"},
+            "suppressed_verdict_id": {"type": "string"},
+            "related_verdict_id": {"type": "string", "nullable": True},
+            "suppressed_at": {"type": "string", "format": "date-time"},
+        },
+        "additionalProperties": True,
+    },
+    "ComponentState": {
+        "type": "object",
+        "description": (
+            "A worker's persisted processing state. Shape matches the "
+            "``component_state`` table columns returned by "
+            "``Store.get_component_state`` (``SELECT *``); the "
+            "``hysteresis_state`` and ``dedup_cache`` JSON blobs are "
+            "decoded into objects."
+        ),
+        "required": ["component"],
+        "properties": {
+            "component": {"type": "string"},
+            "last_cursor": {"type": "string", "nullable": True},
+            "hysteresis_state": {
+                "type": "object",
+                "additionalProperties": True,
+                "nullable": True,
+            },
+            "dedup_cache": {
                 "type": "object",
                 "additionalProperties": True,
                 "nullable": True,
@@ -724,60 +891,13 @@ SCHEMAS: dict[str, dict] = {
         },
         "additionalProperties": True,
     },
-    "Manifest": {
-        "type": "object",
-        "description": "An OpenSRM v2 service manifest loaded into the catalogue.",
-        "required": ["service", "spec", "loaded_at"],
-        "properties": {
-            "service": {"type": "string"},
-            "spec": {
-                "type": "object",
-                "description": "The OpenSRM v2 manifest body, opaque to core.",
-                "additionalProperties": True,
-            },
-            "loaded_at": {"type": "string", "format": "date-time"},
-        },
-        "additionalProperties": True,
-    },
-    "Suppression": {
-        "type": "object",
-        "description": "An operator- or worker-recorded 'ignore this verdict pattern' decision.",
-        "required": ["id", "pattern", "created_at"],
-        "properties": {
-            "id": {"type": "string"},
-            "pattern": {
-                "type": "object",
-                "additionalProperties": True,
-            },
-            "created_at": {"type": "string", "format": "date-time"},
-            "expires_at": {"type": "string", "format": "date-time", "nullable": True},
-        },
-        "additionalProperties": True,
-    },
-    "ComponentState": {
-        "type": "object",
-        "description": "Opaque per-worker persistence blob used for crash recovery.",
-        "required": ["component", "updated_at"],
-        "properties": {
-            "component": {"type": "string"},
-            "state": {
-                "type": "object",
-                "additionalProperties": True,
-            },
-            "updated_at": {"type": "string", "format": "date-time"},
-        },
-        "additionalProperties": True,
-    },
     "StuckActionRequest": {
-        "type": "object",
-        "description": "An action_request verdict whose deadline elapsed without a response.",
-        "required": ["verdict_id", "deadline", "age_seconds"],
-        "properties": {
-            "verdict_id": {"type": "string"},
-            "deadline": {"type": "string", "format": "date-time"},
-            "age_seconds": {"type": "integer"},
-            "service": {"type": "string", "nullable": True},
-        },
-        "additionalProperties": True,
+        "description": (
+            "A raw ``action_request`` verdict whose corresponding case has "
+            "not yet been created. ``Store.get_stuck_action_requests`` "
+            "returns the verdict's stored ``content`` blob verbatim — it "
+            "does not derive ``deadline`` or ``age_seconds`` fields."
+        ),
+        "allOf": [{"$ref": "#/components/schemas/Verdict"}],
     },
 }

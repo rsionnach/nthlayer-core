@@ -1379,7 +1379,7 @@
             }
           },
           "422": {
-            "description": "Missing required fields or invalid temporal ordering.",
+            "description": "``missing_fields`` \u2014 required body field absent; or ``invalid_parameter`` \u2014 ``active_from`` / ``active_until`` not valid ISO timestamps, or ``active_until`` is not strictly after ``active_from``.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1505,7 +1505,7 @@
             }
           },
           "422": {
-            "description": "Missing lifted_by field.",
+            "description": "``missing_fields`` \u2014 ``lifted_by`` missing, empty, or ``null`` (the handler treats all three identically).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1638,8 +1638,8 @@
               }
             }
           },
-          "400": {
-            "description": "Invalid threshold parameter.",
+          "422": {
+            "description": "``invalid_parameter`` \u2014 query parameter rejected (e.g. non-integer or negative ``limit``).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1891,11 +1891,11 @@
             "name": "limit",
             "in": "query",
             "required": false,
-            "description": "Maximum number of records to return.",
+            "description": "Maximum number of records to return. ``limit=0`` is accepted and returns an empty array; negative values are rejected by the handler.",
             "schema": {
               "type": "integer",
               "default": 100,
-              "minimum": 1
+              "minimum": 0
             }
           }
         ],
@@ -1913,8 +1913,8 @@
               }
             }
           },
-          "400": {
-            "description": "Invalid limit parameter.",
+          "422": {
+            "description": "``invalid_parameter`` \u2014 query parameter rejected (e.g. non-integer or negative ``limit``).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2021,12 +2021,11 @@
         ],
         "responses": {
           "200": {
-            "description": "The opaque state blob previously persisted by the component.",
+            "description": "The component_state row previously persisted by the component.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true
+                  "$ref": "#/components/schemas/ComponentState"
                 }
               }
             }
@@ -2101,8 +2100,8 @@
               }
             }
           },
-          "400": {
-            "description": "Invalid threshold parameter.",
+          "422": {
+            "description": "``invalid_parameter`` \u2014 query parameter rejected (e.g. non-integer or negative ``limit``).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2474,51 +2473,201 @@
       },
       "ChangeFreeze": {
         "type": "object",
-        "description": "A named window during which automated responses are blocked.",
+        "description": "A named window during which automated responses are blocked. ``get_active_freezes`` returns the original POST body verbatim (stored in the ``content`` column), so the response shape is the request shape \u2014 required fields below mirror the handler's validation in ``post_change_freeze``.",
         "required": [
           "name",
-          "reason",
-          "starts_at",
-          "active"
+          "declared_by",
+          "declared_at",
+          "active_from",
+          "active_until"
         ],
         "properties": {
           "name": {
             "type": "string"
           },
-          "reason": {
+          "declared_by": {
             "type": "string"
           },
-          "starts_at": {
+          "declared_at": {
             "type": "string",
             "format": "date-time"
           },
-          "ends_at": {
+          "active_from": {
             "type": "string",
-            "format": "date-time",
-            "nullable": true
+            "format": "date-time"
           },
-          "active": {
-            "type": "boolean"
+          "active_until": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason": {
+            "type": "string"
           }
         },
         "additionalProperties": true
       },
       "Heartbeat": {
         "type": "object",
-        "description": "Liveness signal from a worker component.",
+        "description": "A heartbeat row enriched with derived ``health`` and ``age_seconds`` fields by ``Store.get_heartbeats_with_health``. The derivation against the configured threshold is the entire purpose of this endpoint.",
         "required": [
           "component",
-          "timestamp"
+          "instance_id",
+          "last_seen",
+          "health",
+          "age_seconds"
         ],
         "properties": {
           "component": {
             "type": "string"
           },
-          "timestamp": {
+          "instance_id": {
+            "type": "string"
+          },
+          "last_seen": {
             "type": "string",
             "format": "date-time"
           },
-          "metadata": {
+          "state": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true,
+            "description": "Opaque worker-supplied state from the POST body, or null."
+          },
+          "health": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "degraded"
+            ],
+            "description": "``degraded`` when ``age_seconds`` exceeds the ``threshold`` query parameter (default 30)."
+          },
+          "age_seconds": {
+            "type": "number",
+            "description": "Seconds since ``last_seen``, rounded to one decimal."
+          }
+        },
+        "additionalProperties": true
+      },
+      "Manifest": {
+        "type": "object",
+        "description": "An OpenSRM v2 service manifest serialised by ``catalogue.manifest_to_dict``. The shape is flat \u2014 there is no nested ``spec`` wrapper \u2014 and ``slos`` / ``dependencies`` are always present (possibly empty).",
+        "required": [
+          "name",
+          "team",
+          "tier",
+          "type",
+          "namespace",
+          "source_format",
+          "slos",
+          "dependencies"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "team": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "source_format": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "slos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "contracts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "Suppression": {
+        "type": "object",
+        "description": "An audit row recorded when a worker declined to act on a verdict (active incident, dedup window, hysteresis, etc.). Shape matches the ``suppressions`` table columns returned by ``Store.query_suppressions`` (``SELECT *``).",
+        "required": [
+          "id",
+          "component",
+          "reason",
+          "suppressed_verdict_id",
+          "suppressed_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Auto-increment row id from the suppressions table."
+          },
+          "component": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "suppressed_verdict_id": {
+            "type": "string"
+          },
+          "related_verdict_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "suppressed_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": true
+      },
+      "ComponentState": {
+        "type": "object",
+        "description": "A worker's persisted processing state. Shape matches the ``component_state`` table columns returned by ``Store.get_component_state`` (``SELECT *``); the ``hysteresis_state`` and ``dedup_cache`` JSON blobs are decoded into objects.",
+        "required": [
+          "component"
+        ],
+        "properties": {
+          "component": {
+            "type": "string"
+          },
+          "last_cursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "hysteresis_state": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          },
+          "dedup_cache": {
             "type": "object",
             "additionalProperties": true,
             "nullable": true
@@ -2526,105 +2675,13 @@
         },
         "additionalProperties": true
       },
-      "Manifest": {
-        "type": "object",
-        "description": "An OpenSRM v2 service manifest loaded into the catalogue.",
-        "required": [
-          "service",
-          "spec",
-          "loaded_at"
-        ],
-        "properties": {
-          "service": {
-            "type": "string"
-          },
-          "spec": {
-            "type": "object",
-            "description": "The OpenSRM v2 manifest body, opaque to core.",
-            "additionalProperties": true
-          },
-          "loaded_at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "additionalProperties": true
-      },
-      "Suppression": {
-        "type": "object",
-        "description": "An operator- or worker-recorded 'ignore this verdict pattern' decision.",
-        "required": [
-          "id",
-          "pattern",
-          "created_at"
-        ],
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "pattern": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "expires_at": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          }
-        },
-        "additionalProperties": true
-      },
-      "ComponentState": {
-        "type": "object",
-        "description": "Opaque per-worker persistence blob used for crash recovery.",
-        "required": [
-          "component",
-          "updated_at"
-        ],
-        "properties": {
-          "component": {
-            "type": "string"
-          },
-          "state": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "additionalProperties": true
-      },
       "StuckActionRequest": {
-        "type": "object",
-        "description": "An action_request verdict whose deadline elapsed without a response.",
-        "required": [
-          "verdict_id",
-          "deadline",
-          "age_seconds"
-        ],
-        "properties": {
-          "verdict_id": {
-            "type": "string"
-          },
-          "deadline": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "age_seconds": {
-            "type": "integer"
-          },
-          "service": {
-            "type": "string",
-            "nullable": true
+        "description": "A raw ``action_request`` verdict whose corresponding case has not yet been created. ``Store.get_stuck_action_requests`` returns the verdict's stored ``content`` blob verbatim \u2014 it does not derive ``deadline`` or ``age_seconds`` fields.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Verdict"
           }
-        },
-        "additionalProperties": true
+        ]
       }
     }
   }
