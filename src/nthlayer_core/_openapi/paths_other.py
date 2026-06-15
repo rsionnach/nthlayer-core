@@ -559,9 +559,12 @@ PATHS: dict[str, dict] = {
                     "description": (
                         "Maximum number of records to return. ``limit=0`` is "
                         "accepted and returns an empty array; negative values "
-                        "are rejected by the handler."
+                        "are rejected by the handler. The server clamps "
+                        "requests above 1000 silently "
+                        "(opensrm-tu04.1.2.2); paginate via "
+                        "``created_after`` for more."
                     ),
-                    "schema": {"type": "integer", "default": 100, "minimum": 0},
+                    "schema": {"type": "integer", "default": 100, "minimum": 0, "maximum": 1000},
                 },
             ],
             "responses": {

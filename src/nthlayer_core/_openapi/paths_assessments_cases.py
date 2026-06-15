@@ -129,9 +129,11 @@ PATHS: dict[str, dict] = {
                         "Maximum number of assessments to return. "
                         "``limit=0`` is accepted by the handler and "
                         "returns an empty array (matches tu04.1.2 I1 "
-                        "fix). No server-side maximum is enforced."
+                        "fix). The server clamps requests above 1000 "
+                        "silently (opensrm-tu04.1.2.2); paginate via "
+                        "``created_after`` for more."
                     ),
-                    "schema": {"type": "integer", "default": 100, "minimum": 0},
+                    "schema": {"type": "integer", "default": 100, "minimum": 0, "maximum": 1000},
                 },
             ],
             "responses": {
@@ -277,9 +279,11 @@ PATHS: dict[str, dict] = {
                         "Maximum number of cases to return. "
                         "``limit=0`` is accepted by the handler and "
                         "returns an empty array (matches tu04.1.2 I1 "
-                        "fix). No server-side maximum is enforced."
+                        "fix). The server clamps requests above 1000 "
+                        "silently (opensrm-tu04.1.2.2); paginate via "
+                        "``created_after`` for more."
                     ),
-                    "schema": {"type": "integer", "default": 100, "minimum": 0},
+                    "schema": {"type": "integer", "default": 100, "minimum": 0, "maximum": 1000},
                 },
             ],
             "responses": {

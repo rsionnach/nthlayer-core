@@ -170,13 +170,15 @@ PATHS: dict[str, dict] = {
                     "name": "limit",
                     "in": "query",
                     "required": False,
-                    "schema": {"type": "integer", "default": 100, "minimum": 0},
+                    "schema": {"type": "integer", "default": 100, "minimum": 0, "maximum": 1000},
                     "description": (
                         "Maximum number of records to return. "
                         "``limit=0`` is accepted by the handler and "
                         "returns an empty array (the underlying store "
-                        "passes the value to SQL ``LIMIT 0``). No "
-                        "server-side maximum is enforced."
+                        "passes the value to SQL ``LIMIT 0``). The "
+                        "server clamps requests above 1000 silently "
+                        "(opensrm-tu04.1.2.2); paginate via "
+                        "``created_after`` for more."
                     ),
                 },
             ],

@@ -157,6 +157,20 @@ class TestGetVerdicts:
         assert len(r.json()) == 2
 
     @pytest.mark.asyncio
+    async def test_limit_above_cap_is_silently_clamped(self, client):
+        """opensrm-tu04.1.2.2 — limit above LIMIT_CAP (1000) is clamped, not rejected.
+
+        Inserts 3 verdicts and queries limit=2000. Handler clamps the
+        request to 1000 (the cap) but the store still returns at most
+        the actual row count. Outcome: 3 results + 200 status.
+        """
+        for i in range(3):
+            await client.post("/verdicts", json=_verdict(vid=f"clamp-{i}"))
+        r = await client.get("/verdicts", params={"limit": "2000"})
+        assert r.status_code == 200
+        assert len(r.json()) == 3
+
+    @pytest.mark.asyncio
     async def test_invalid_limit_returns_422(self, client):
         r = await client.get("/verdicts", params={"limit": "abc"})
         assert r.status_code == 422

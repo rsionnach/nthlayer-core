@@ -179,8 +179,31 @@ def _validate_required(
     return None
 
 
-def _parse_int_param(params, name: str, default: int) -> tuple[int, JSONResponse | None]:
-    """Parse an integer query parameter. Returns (value, None) or (0, error_response)."""
+#: Server-side cap on ``limit`` query params across paginated GET endpoints
+#: (opensrm-tu04.1.2.2). Callers requesting more receive the cap silently —
+#: rationale: backward-compatible (no 422 on existing too-large clients),
+#: bounds the DoS surface, and the docs at docs/api/openapi.json publish
+#: the value as ``maximum: 1000`` on each affected parameter. Bump in lockstep
+#: with the spec ``maximum`` annotations.
+LIMIT_CAP = 1000
+
+
+def _parse_int_param(
+    params,
+    name: str,
+    default: int,
+    *,
+    max_value: int | None = None,
+) -> tuple[int, JSONResponse | None]:
+    """Parse an integer query parameter. Returns (value, None) or (0, error_response).
+
+    Negative values are rejected with 422 ``invalid_parameter``. When
+    ``max_value`` is supplied and the request exceeds it, the value is
+    silently clamped to ``max_value`` (NOT rejected) — a deliberately
+    permissive contract that the OpenAPI spec advertises via
+    ``maximum: N`` on each annotated parameter. See ``LIMIT_CAP`` for
+    the canonical cap used by paginated GET endpoints.
+    """
     raw = params.get(name)
     if raw is None:
         return default, None
@@ -191,6 +214,8 @@ def _parse_int_param(params, name: str, default: int) -> tuple[int, JSONResponse
                 {"error": "invalid_parameter", "detail": {"param": name, "message": "must be non-negative"}},
                 status_code=422,
             )
+        if max_value is not None and value > max_value:
+            value = max_value
         return value, None
     except ValueError:
         return 0, JSONResponse(
@@ -263,7 +288,7 @@ async def get_verdicts(request: Request) -> JSONResponse:
     """Query verdicts with optional filters."""
     store = _get_store()
     params = request.query_params
-    limit, err = _parse_int_param(params, "limit", 100)
+    limit, err = _parse_int_param(params, "limit", 100, max_value=LIMIT_CAP)
     if err:
         return err
     results = store.query_verdicts(
@@ -469,7 +494,7 @@ async def get_assessments(request: Request) -> JSONResponse:
     """Query assessments with optional filters."""
     store = _get_store()
     params = request.query_params
-    limit, err = _parse_int_param(params, "limit", 100)
+    limit, err = _parse_int_param(params, "limit", 100, max_value=LIMIT_CAP)
     if err:
         return err
     results = store.query_assessments(
@@ -541,7 +566,7 @@ async def get_cases(request: Request) -> JSONResponse:
     """Query cases with optional filters."""
     store = _get_store()
     params = request.query_params
-    limit, err = _parse_int_param(params, "limit", 100)
+    limit, err = _parse_int_param(params, "limit", 100, max_value=LIMIT_CAP)
     if err:
         return err
     results = store.query_cases(
@@ -831,7 +856,7 @@ async def get_suppressions(request: Request) -> JSONResponse:
     """Query suppressions with optional filters."""
     store = _get_store()
     params = request.query_params
-    limit, err = _parse_int_param(params, "limit", 100)
+    limit, err = _parse_int_param(params, "limit", 100, max_value=LIMIT_CAP)
     if err:
         return err
     results = store.query_suppressions(

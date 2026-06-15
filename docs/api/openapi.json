@@ -192,9 +192,10 @@
             "schema": {
               "type": "integer",
               "default": 100,
-              "minimum": 0
+              "minimum": 0,
+              "maximum": 1000
             },
-            "description": "Maximum number of records to return. ``limit=0`` is accepted by the handler and returns an empty array (the underlying store passes the value to SQL ``LIMIT 0``). No server-side maximum is enforced."
+            "description": "Maximum number of records to return. ``limit=0`` is accepted by the handler and returns an empty array (the underlying store passes the value to SQL ``LIMIT 0``). The server clamps requests above 1000 silently (opensrm-tu04.1.2.2); paginate via ``created_after`` for more."
           }
         ],
         "responses": {
@@ -761,11 +762,12 @@
             "name": "limit",
             "in": "query",
             "required": false,
-            "description": "Maximum number of assessments to return. ``limit=0`` is accepted by the handler and returns an empty array (matches tu04.1.2 I1 fix). No server-side maximum is enforced.",
+            "description": "Maximum number of assessments to return. ``limit=0`` is accepted by the handler and returns an empty array (matches tu04.1.2 I1 fix). The server clamps requests above 1000 silently (opensrm-tu04.1.2.2); paginate via ``created_after`` for more.",
             "schema": {
               "type": "integer",
               "default": 100,
-              "minimum": 0
+              "minimum": 0,
+              "maximum": 1000
             }
           }
         ],
@@ -935,11 +937,12 @@
             "name": "limit",
             "in": "query",
             "required": false,
-            "description": "Maximum number of cases to return. ``limit=0`` is accepted by the handler and returns an empty array (matches tu04.1.2 I1 fix). No server-side maximum is enforced.",
+            "description": "Maximum number of cases to return. ``limit=0`` is accepted by the handler and returns an empty array (matches tu04.1.2 I1 fix). The server clamps requests above 1000 silently (opensrm-tu04.1.2.2); paginate via ``created_after`` for more.",
             "schema": {
               "type": "integer",
               "default": 100,
-              "minimum": 0
+              "minimum": 0,
+              "maximum": 1000
             }
           }
         ],
@@ -1889,11 +1892,12 @@
             "name": "limit",
             "in": "query",
             "required": false,
-            "description": "Maximum number of records to return. ``limit=0`` is accepted and returns an empty array; negative values are rejected by the handler.",
+            "description": "Maximum number of records to return. ``limit=0`` is accepted and returns an empty array; negative values are rejected by the handler. The server clamps requests above 1000 silently (opensrm-tu04.1.2.2); paginate via ``created_after`` for more.",
             "schema": {
               "type": "integer",
               "default": 100,
-              "minimum": 0
+              "minimum": 0,
+              "maximum": 1000
             }
           }
         ],
