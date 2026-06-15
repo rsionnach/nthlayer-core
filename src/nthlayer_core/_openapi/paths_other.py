@@ -17,7 +17,11 @@ PATHS: dict[str, dict] = {
                 "Creates a named window during which automated responses are "
                 "blocked. The body must include name, declared_by, declared_at, "
                 "active_from, and active_until; active_until must strictly "
-                "follow active_from. Duplicate names return 409."
+                "follow active_from. Names are permanently reserved — "
+                "``change_freezes.name`` is the SQL primary key (store.py:81), "
+                "so a 409 ``duplicate`` is returned even when the prior "
+                "freeze of the same name has been lifted. Use a fresh name "
+                "for a new freeze window."
             ),
             "operationId": "postChangeFreeze",
             "tags": ["change-freezes"],
@@ -61,7 +65,13 @@ PATHS: dict[str, dict] = {
                     },
                 },
                 "409": {
-                    "description": "A change freeze with this name already exists.",
+                    "description": (
+                        "``duplicate`` — a change freeze with this name "
+                        "exists or has previously existed. Names are "
+                        "permanently reserved (PK on store.py:81); a "
+                        "lifted freeze does NOT free its name. Use a "
+                        "fresh name for a new freeze window."
+                    ),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"},
