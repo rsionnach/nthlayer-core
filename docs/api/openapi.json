@@ -1303,7 +1303,7 @@
     "/change-freezes": {
       "post": {
         "summary": "Declare a change freeze",
-        "description": "Creates a named window during which automated responses are blocked. The body must include name, declared_by, declared_at, active_from, and active_until; active_until must strictly follow active_from. Names are permanently reserved \u2014 ``change_freezes.name`` is the SQL primary key (store.py:81), so a 409 ``duplicate`` is returned even when the prior freeze of the same name has been lifted. Use a fresh name for a new freeze window.",
+        "description": "Creates a named window during which automated responses are blocked. The body must include name, declared_by, declared_at, active_from, and active_until; active_until must strictly follow active_from. Names are reserved while the freeze row exists: ``change_freezes.name`` is the SQL primary key (store.py:81), so a 409 ``duplicate`` is returned even when the prior freeze of the same name has been lifted. Lifted freezes are pruned after the configured retention (default 90 days, store.py:853), after which the name may be reused.",
         "operationId": "postChangeFreeze",
         "tags": [
           "change-freezes"
@@ -1369,7 +1369,7 @@
             }
           },
           "409": {
-            "description": "``duplicate`` \u2014 a change freeze with this name exists or has previously existed. Names are permanently reserved (PK on store.py:81); a lifted freeze does NOT free its name. Use a fresh name for a new freeze window.",
+            "description": "``duplicate`` \u2014 a change freeze with this name exists or has been recently lifted but not yet pruned. Names are reserved while the row exists (PK on store.py:81); a lifted freeze keeps its name until the retention pruner runs (default 90 days, store.py:853). Use a fresh name for a new freeze window unless you intend to wait for pruning.",
             "content": {
               "application/json": {
                 "schema": {
