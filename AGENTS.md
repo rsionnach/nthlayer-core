@@ -24,9 +24,18 @@ uv run pytest -q                       # full suite
 uv run pytest tests/test_<name>.py -v  # single file
 uv run pytest -k "<expr>" -v           # single test by name
 uv run ruff check src/ tests/          # lint
+uv run python scripts/regen_openapi.py # regen docs/api/openapi.json
 nthlayer serve --host 0.0.0.0 --port 8000   # start the HTTP server
 nthlayer -V                                  # print version
 ```
+
+**OpenAPI spec discipline (opensrm-tu04.1).** Any edit to a
+`src/nthlayer_core/_openapi/paths_*.py` fragment or to
+`openapi_spec.py`'s shared schemas MUST be followed by
+`uv run python scripts/regen_openapi.py` before commit. CI test
+`test_checked_in_artefact_matches` (tests/test_openapi.py) gates
+this — PRs that change the spec without committing the regenerated
+`docs/api/openapi.json` fail the gate.
 
 Ecosystem testing conventions: [../nthlayer/docs/testing.md](../nthlayer/docs/testing.md).
 
