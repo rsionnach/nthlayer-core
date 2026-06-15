@@ -171,6 +171,20 @@ class TestGetVerdicts:
         assert len(r.json()) == 3
 
     @pytest.mark.asyncio
+    async def test_limit_at_cap_is_not_clamped(self, client):
+        """opensrm-tu04.1.2.2 — limit=LIMIT_CAP exactly is the inclusive boundary.
+
+        Clamp branch is ``value > max_value``; 1000 must pass through
+        un-clamped. Pins the inclusive-boundary semantic so a future
+        refactor switching to ``>=`` would fail this test.
+        """
+        for i in range(2):
+            await client.post("/verdicts", json=_verdict(vid=f"boundary-{i}"))
+        r = await client.get("/verdicts", params={"limit": "1000"})
+        assert r.status_code == 200
+        assert len(r.json()) == 2
+
+    @pytest.mark.asyncio
     async def test_invalid_limit_returns_422(self, client):
         r = await client.get("/verdicts", params={"limit": "abc"})
         assert r.status_code == 422

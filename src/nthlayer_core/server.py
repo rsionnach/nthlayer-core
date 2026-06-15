@@ -203,9 +203,19 @@ def _parse_int_param(
     permissive contract that the OpenAPI spec advertises via
     ``maximum: N`` on each annotated parameter. See ``LIMIT_CAP`` for
     the canonical cap used by paginated GET endpoints.
+
+    The ``default`` is clamped to ``max_value`` too: a caller that ever
+    sets ``default > max_value`` would otherwise silently bypass the
+    cap when the query param is absent. ``max_value`` must be positive
+    when supplied — SQLite interprets ``LIMIT -1`` as "no limit",
+    inverting the cap contract, so we refuse the malformed cap up front.
     """
+    if max_value is not None and max_value <= 0:
+        raise ValueError(f"_parse_int_param: max_value must be positive (got {max_value!r})")
     raw = params.get(name)
     if raw is None:
+        if max_value is not None and default > max_value:
+            return max_value, None
         return default, None
     try:
         value = int(raw)
