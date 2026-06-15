@@ -46,14 +46,20 @@ contract, or violate the "core is the only writer" invariant.
    Do not rewrite the predicate to require an explicit
    `outcome.status` field — that would break legacy verdict data.
 
-4. **CloudEvents envelope auto-detect, two distinct error codes.**
+4. **CloudEvents envelope auto-detect, distinct error codes per route.**
    Body with top-level `specversion` → unwrap envelope before
    validation; without → raw dict (back-compat; v2 will require
    envelope). On error:
    - 400 `envelope_invalid` (cannot unwrap, `envelope_version=null`).
-   - 422 `record_invalid` (inner record fails validation,
-     `envelope_version=null` for raw or `"1.0"` for unwrapped).
+   - 422 `verdict_invalid` on POST `/verdicts` (server.py:243) or
+     `assessment_invalid` on POST `/assessments` (server.py:449) —
+     inner record fails required-field validation. The body carries
+     `envelope_version=null` for raw or `"1.0"` for unwrapped so
+     callers can distinguish.
    Pinned in `test_api.py`. Do not collapse these to a single 4xx.
+   The historical `record_invalid` name was retired during
+   opensrm-tu04.1.2 — handlers and the OpenAPI 3.1 spec use the
+   per-route names.
 
 5. **Store errors do not leak SQLite internals to clients.**
    `_store_error_response(handler, exc, **context)` logs the full
