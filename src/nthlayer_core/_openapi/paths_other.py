@@ -289,7 +289,14 @@ PATHS: dict[str, dict] = {
                     "name": "threshold",
                     "in": "query",
                     "required": False,
-                    "description": "Age in seconds beyond which a heartbeat is treated as degraded.",
+                    "description": (
+                        "Age in seconds beyond which a heartbeat is "
+                        "treated as degraded. ``threshold=0`` is "
+                        "accepted and marks every heartbeat with "
+                        "``age_seconds > 0`` as degraded — "
+                        "operationally useful for forcing the full "
+                        "degraded set during diagnostics."
+                    ),
                     "schema": {"type": "integer", "default": 30, "minimum": 0},
                 },
             ],
@@ -696,7 +703,14 @@ PATHS: dict[str, dict] = {
                     "name": "threshold",
                     "in": "query",
                     "required": False,
-                    "description": "Age in seconds above which an unresolved action_request is considered stuck.",
+                    "description": (
+                        "Age in seconds above which an unresolved "
+                        "action_request is considered stuck. "
+                        "``threshold=0`` is accepted and returns "
+                        "every unresolved action_request — useful "
+                        "for forcing the full open set during "
+                        "diagnostics."
+                    ),
                     "schema": {"type": "integer", "default": 60, "minimum": 0},
                 },
             ],

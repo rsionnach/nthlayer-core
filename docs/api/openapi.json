@@ -1616,7 +1616,7 @@
             "name": "threshold",
             "in": "query",
             "required": false,
-            "description": "Age in seconds beyond which a heartbeat is treated as degraded.",
+            "description": "Age in seconds beyond which a heartbeat is treated as degraded. ``threshold=0`` is accepted and marks every heartbeat with ``age_seconds > 0`` as degraded \u2014 operationally useful for forcing the full degraded set during diagnostics.",
             "schema": {
               "type": "integer",
               "default": 30,
@@ -2064,7 +2064,7 @@
             "name": "threshold",
             "in": "query",
             "required": false,
-            "description": "Age in seconds above which an unresolved action_request is considered stuck.",
+            "description": "Age in seconds above which an unresolved action_request is considered stuck. ``threshold=0`` is accepted and returns every unresolved action_request \u2014 useful for forcing the full open set during diagnostics.",
             "schema": {
               "type": "integer",
               "default": 60,
