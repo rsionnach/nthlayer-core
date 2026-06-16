@@ -82,6 +82,9 @@ INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 ```
 
+> The server binds to `0.0.0.0` by default (all interfaces); the curl
+> commands below use `localhost:8000`, which reaches it.
+
 Leave the server running and open a second terminal for the next
 steps.
 
@@ -118,9 +121,7 @@ curl -X POST localhost:8000/verdicts \
 {"id":"verdict-001"}
 ```
 
-The HTTP status is `201 Created`. If you re-run the same `POST`,
-you'll get `409` with `{"error":"duplicate","detail":{"id":"verdict-001"}}`
-— verdict IDs are unique.
+The HTTP status is `201 Created`.
 
 ### 7. Fetch the verdict by id
 
