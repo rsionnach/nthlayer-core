@@ -104,7 +104,8 @@ contract, or violate the "core is the only writer" invariant.
 - Source layout, store schema + design decisions, store public API,
   test suite cross-reference: `docs/architecture.md`.
 - Operator deploy guide (tutorial / env-var reference / troubleshooting /
-  Litestream hardening): `docs/deploying.md` (opensrm-tu04.2).
+  Litestream hardening): `docs/deploying.md` (opensrm-tu04.2), pinned by
+  `tests/test_deploying_doc_parity.py` (opensrm-tu04.2.1).
 - Build / test / lint / run / CI / release: `AGENTS.md`.
 - Override sidecar conventions (privacy boundary, fail-open, batch
   cardinality): `nthlayer-override-adapter/CLAUDE.md`.
