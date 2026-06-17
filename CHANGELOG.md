@@ -6,6 +6,53 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [1.7.0](https://github.com/rsionnach/nthlayer-core/compare/v1.6.0...v1.7.0) (2026-06-17)
+
+
+### Features
+
+* **api:** add POST /verdicts/{id}/override handler · opensrm-jmy.18 ([367bc3d](https://github.com/rsionnach/nthlayer-core/commit/367bc3d73ebcf11aebc118ccb020147b68726a8b))
+* **store:** implement VerdictStore ABC on Store · opensrm-jmy.18 ([1638d67](https://github.com/rsionnach/nthlayer-core/commit/1638d673ac852427a843007d15ee65ac46bf00ce))
+* **tu04.1.1:** OpenAPI 3.1 framework + /health worked example ([8002a4e](https://github.com/rsionnach/nthlayer-core/commit/8002a4e28820f6adb2629100be5c78bbea095fa1))
+* **tu04.1.1:** scripts/regen_openapi.py + initial openapi.json ([850a6e1](https://github.com/rsionnach/nthlayer-core/commit/850a6e1a33b161170487fc4a8073d8e0fc20f158))
+* **tu04.1.1:** serve OpenAPI spec at GET /openapi.json ([bbe6418](https://github.com/rsionnach/nthlayer-core/commit/bbe641870c66e88e2399ca72396eb280e57d9bc5))
+* **tu04.1.2.2:** cap GET limit at 1000 to bound DoS surface ([83dacf8](https://github.com/rsionnach/nthlayer-core/commit/83dacf832cc2229d83d757e67cc105dfa1111bee))
+* **tu04.1.2:** document /verdicts* path group (7 routes) ([f966fa6](https://github.com/rsionnach/nthlayer-core/commit/f966fa6725b2a22004667929389efaf52539ff03))
+* **tu04.1.3:** document /assessments and /cases path groups (8 routes) ([d60505a](https://github.com/rsionnach/nthlayer-core/commit/d60505a477f39050b607449fa262b0ee1940e337))
+* **tu04.1.4:** document remainder path groups (13 routes) + close parity gap ([ec8f049](https://github.com/rsionnach/nthlayer-core/commit/ec8f0494c5ef6ab8e849e7aa39080dee0cd54870))
+
+
+### Bug Fixes
+
+* **ci:** add ruff to dev deps (5vuz miss) ([145ca59](https://github.com/rsionnach/nthlayer-core/commit/145ca59cb4563eb7d5dea67fe8d156220a1a9c2e))
+* **ci:** add sibling-checkout pattern for nthlayer-common (5vuz miss) ([4f85c76](https://github.com/rsionnach/nthlayer-core/commit/4f85c7692d0a34b96b7ddedcddee654a61a68af2))
+* **ci:** add tag-push + workflow_dispatch triggers to release.yml ([eb1b85a](https://github.com/rsionnach/nthlayer-core/commit/eb1b85af5b067dbc60afd9ec173bbc9ad4d1d859))
+
+
+### Code Refactoring
+
+* read version from importlib.metadata, not source literal ([9337df2](https://github.com/rsionnach/nthlayer-core/commit/9337df221d71abd0fb18de1c1e2d5896a8b58b84))
+
+
+### Documentation
+
+* **CLAUDE.md:** catch up auto-memory drift from prior bead sessions ([6945bac](https://github.com/rsionnach/nthlayer-core/commit/6945bace66b617fd21162dfe97bf501e52942cc3))
+* **CLAUDE.md:** document release-please + smoke gate + Dependabot ([0f7433f](https://github.com/rsionnach/nthlayer-core/commit/0f7433f0a9de568932a8b25f1c2edd1c9e54bbf2))
+* link to ecosystem testing conventions (opensrm-2wkc) ([271ddb1](https://github.com/rsionnach/nthlayer-core/commit/271ddb1a2cf3edaf73da0befe264839b9a1debb5))
+* thin CLAUDE.md; move detail to AGENTS.md + docs/ ([f7fb4ca](https://github.com/rsionnach/nthlayer-core/commit/f7fb4cad547fc94529379a525b1983a44434adac))
+* **tu04.1.2.1:** hard rule [#4](https://github.com/rsionnach/nthlayer-core/issues/4) record_invalid → verdict_invalid ([d2392d1](https://github.com/rsionnach/nthlayer-core/commit/d2392d19da66c66f7f9f0314aa7a4bbf4511d1a9))
+* **tu04.1.4.1:** document threshold=0 semantics on /heartbeats and /monitoring ([11570c0](https://github.com/rsionnach/nthlayer-core/commit/11570c00f36dac556619dc79c217d34e726a85ad))
+* **tu04.1.4.2:** clarify change-freeze name uniqueness scope ([146da2a](https://github.com/rsionnach/nthlayer-core/commit/146da2ad8321684c068d6c78df8d3e19f1003c29))
+* **tu04.1.5:** OpenAPI pointer in CLAUDE.md + regen discipline in AGENTS.md ([d44dd6f](https://github.com/rsionnach/nthlayer-core/commit/d44dd6f639fbd6ac42d25efa2e67033e626fd3eb))
+* **tu04.2:** deploying.md How-to — Litestream sidecar (documented, not validated) ([7d0dfbc](https://github.com/rsionnach/nthlayer-core/commit/7d0dfbc9c9c8323bb5dc81ebc545708fae245797))
+* **tu04.2:** deploying.md Reference — 7-row troubleshooting table + expansions ([1a4b8fa](https://github.com/rsionnach/nthlayer-core/commit/1a4b8fab54149a19689c32a3fa5ffb24060ae1ca))
+* **tu04.2:** deploying.md Reference — CLI + env vars + manifests directory ([fcfdf6a](https://github.com/rsionnach/nthlayer-core/commit/fcfdf6a96071cadb8eea4d19a48b262f104252e6))
+* **tu04.2:** deploying.md skeleton + Tutorial section (validated in tmpdir) ([8c7e666](https://github.com/rsionnach/nthlayer-core/commit/8c7e666f530108332456010dcc8604ae2f510a09))
+* **tu04.2:** README Configuration section links to canonical deploying.md ([61e5499](https://github.com/rsionnach/nthlayer-core/commit/61e5499820e27f05c2b2e26e7c0083ca9a59ea2c))
+* **tu04.2:** troubleshooting prose-review fixes (cross-platform errno, durable path, log handle) ([b7cedb2](https://github.com/rsionnach/nthlayer-core/commit/b7cedb29d67012b4848b4ed3d24fdf06f488e369))
+* **tu04.2:** Tutorial prose-review fixes (version placeholder, cd handoff, voice tightening) ([e2df256](https://github.com/rsionnach/nthlayer-core/commit/e2df256c8fcbbd69789232effd13e38792b235bb))
+* **tu04.2:** Tutorial spec-review fixes — host-consistency note + 409 paragraph cut ([277d286](https://github.com/rsionnach/nthlayer-core/commit/277d286d53566417eb53d8f7059a7e3a609b2323))
+
 ## [1.6.0](https://github.com/rsionnach/nthlayer-core/compare/v1.5.0...v1.6.0) (2026-05-10)
 
 
