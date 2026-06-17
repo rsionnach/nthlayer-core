@@ -60,6 +60,8 @@ Cases without an explicit `priority` are derived from `blast_radius` + `has_acti
 | `NTHLAYER_STORE_PATH` | SQLite database path | `nthlayer.db` |
 | `NTHLAYER_MANIFESTS_DIR` | Directory of OpenSRM YAML manifests | unset (catalogue empty) |
 
+For step-by-step deployment, troubleshooting, and Litestream hardening, see [`docs/deploying.md`](docs/deploying.md).
+
 ## Schema (v1.5.0)
 
 10 tables, string IDs, JSON TEXT content:
