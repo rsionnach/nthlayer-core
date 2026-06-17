@@ -103,6 +103,8 @@ contract, or violate the "core is the only writer" invariant.
   `tests/test_openapi.py::test_route_parity` (opensrm-tu04.1).
 - Source layout, store schema + design decisions, store public API,
   test suite cross-reference: `docs/architecture.md`.
+- Operator deploy guide (tutorial / env-var reference / troubleshooting /
+  Litestream hardening): `docs/deploying.md` (opensrm-tu04.2).
 - Build / test / lint / run / CI / release: `AGENTS.md`.
 - Override sidecar conventions (privacy boundary, fail-open, batch
   cardinality): `nthlayer-override-adapter/CLAUDE.md`.
