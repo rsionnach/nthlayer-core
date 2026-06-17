@@ -206,8 +206,9 @@ Sample manifests live in the OpenSRM examples directory:
 
 After editing files in the manifests directory, trigger a hot reload
 with `POST /manifests/-/reload`. The server picks up new, changed, and
-deleted files without a restart and returns the list of affected
-service names.
+deleted files without a restart and returns a JSON object with the
+changed service names under `changed` and the resulting catalogue size
+under `total`.
 
 For manifest schema and authoring guidance, see the manifest authoring
 guide (tu04.3 — not yet published).
