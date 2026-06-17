@@ -44,9 +44,9 @@ def _doc_section(heading: str) -> str:
     collide with the requested ``### Environment variables``.
     """
     text = _doc_text()
-    hash_count = heading.count("#")
+    heading_level = heading.count("#")
     heading_re = re.compile(rf"^{re.escape(heading)} *$", re.MULTILINE)
-    sibling_re = re.compile(rf"^#{{1,{hash_count}}} ", re.MULTILINE)
+    sibling_re = re.compile(rf"^#{{1,{heading_level}}} ", re.MULTILINE)
     m = heading_re.search(text)
     if m is None:
         raise AssertionError(f"deploying.md missing heading: {heading}")
@@ -93,6 +93,9 @@ def test_cli_subsection_matches_argparse() -> None:
     section = _doc_section("### CLI")
     doc_flags = set(re.findall(r"--[a-z][a-z0-9-]*", section))
 
+    # argparse exposes no public introspection API; `_actions` is the
+    # documented-by-convention escape hatch (used the same way by Sphinx's
+    # argparse extension and similar tooling).
     parser = build_parser()
     src_flags: set[str] = set()
     for action in parser._actions:

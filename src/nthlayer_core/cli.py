@@ -7,7 +7,8 @@ from nthlayer_core import __version__
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser. Exposed so tests can introspect the surface
-    without running ``main``'s side effects (see test_deploying_doc_parity)."""
+    without running ``main``'s side effects (see
+    ``tests/test_deploying_doc_parity.py``)."""
     parser = argparse.ArgumentParser(description="NthLayer core")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command")
