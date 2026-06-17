@@ -186,7 +186,12 @@ directory and on every `*.yaml` and `*.yml` file inside it. An empty
 directory is a valid configuration — the server starts, the catalogue
 is empty, and verdicts continue to be accepted and returned. A path
 that does not exist or is not a directory is treated the same as
-unset: the catalogue is empty and no error is raised at startup.
+unset: the catalogue is empty and no error is raised at startup. An
+**empty-string** value (e.g. `NTHLAYER_MANIFESTS_DIR=` in a `.env`
+file) is NOT equivalent to unset — it resolves to the server's cwd,
+which usually IS a directory, so the catalogue silently scans cwd for
+`*.yaml` and `*.yml`. Leave the variable unset rather than setting it
+to empty.
 
 ### Manifests directory layout
 
@@ -218,7 +223,7 @@ problem. Table summarises symptoms; paragraphs below give the diagnosis.
 |---|---|---|---|
 | 1 | `nthlayer: command not found` after install | uv tool-shim dir not on `PATH` | `uv tool update-shell` (or add `~/.local/bin` to `PATH`) |
 | 2 | `OSError: [Errno 48/98] Address already in use` | Port 8000 taken | `nthlayer serve --port 8001` or kill the prior process |
-| 3 | `sqlite3.OperationalError: unable to open database file` | Cwd not writable, or `NTHLAYER_STORE_PATH` points at a missing dir | `NTHLAYER_STORE_PATH=/var/lib/nthlayer/store.db` (ensure dir exists and is writable) or chdir to a writable dir |
+| 3 | `sqlite3.OperationalError: unable to open database file` | Cwd not writable, or `NTHLAYER_STORE_PATH` points at a missing dir, **or points at a directory itself instead of a file** | `NTHLAYER_STORE_PATH=/var/lib/nthlayer/store.db` (ensure dir exists and is writable; the path is the file, not the directory) or chdir to a writable dir |
 | 4 | `sqlite3.OperationalError: database is locked` (persistent, not transient) | Two `nthlayer serve` processes on the same DB | Kill the duplicate; one writer per store. WAL + 5s busy-timeout handles transient contention, not two writers |
 | 5 | `GET /manifests` returns `[]` despite `NTHLAYER_MANIFESTS_DIR` set | Relative path resolved from wrong cwd, or dir is empty/missing | Use an absolute path; check server logs for the load summary |
 | 6 | One manifest missing from `GET /manifests` even though the file exists | Invalid YAML or schema mismatch; catalogue skips bad manifests rather than crashing the server | Check server logs for the parse error; fix the YAML; `POST /manifests/-/reload` |
@@ -401,6 +406,14 @@ The `path:` value matches the durable store path established in
 Troubleshooting row 3. See Litestream's docs at <https://litestream.io>
 for the full configuration schema, including non-S3 replica types and
 retention tuning.
+
+Verify replication is actually happening (a wrong bucket name or wrong
+credentials lets `litestream replicate` log errors and retry while
+`nthlayer serve` writes locally — the operator believes the store is
+durable when it is not). Run `litestream snapshots /var/lib/nthlayer/store.db`
+after a few writes; a successful replica produces at least one snapshot
+entry. No snapshots after sustained writes means the replica isn't
+landing — check Litestream's logs for the auth/bucket error.
 
 #### Restore procedure
 
