@@ -221,8 +221,8 @@ below name the underlying invariant and what to grep for in logs.
 | # | Symptom | Cause | Fix |
 |---|---|---|---|
 | 1 | `nthlayer: command not found` after install | uv tool-shim dir not on `PATH` | `uv tool update-shell` (or add `~/.local/bin` to `PATH`) |
-| 2 | `OSError: [Errno 48] Address already in use` | Port 8000 taken | `nthlayer serve --port 8001` or kill the prior process |
-| 3 | `sqlite3.OperationalError: unable to open database file` | Cwd not writable, or `NTHLAYER_STORE_PATH` points at a missing dir | `NTHLAYER_STORE_PATH=/tmp/nthlayer.db` or chdir to a writable dir |
+| 2 | `OSError: [Errno 48/98] Address already in use` | Port 8000 taken | `nthlayer serve --port 8001` or kill the prior process |
+| 3 | `sqlite3.OperationalError: unable to open database file` | Cwd not writable, or `NTHLAYER_STORE_PATH` points at a missing dir | `NTHLAYER_STORE_PATH=/var/lib/nthlayer/store.db` (ensure dir exists and is writable) or chdir to a writable dir |
 | 4 | `sqlite3.OperationalError: database is locked` (persistent, not transient) | Two `nthlayer serve` processes on the same DB | Kill the duplicate; one writer per store. WAL + 5s busy-timeout handles transient contention, not two writers |
 | 5 | `GET /manifests` returns `[]` despite `NTHLAYER_MANIFESTS_DIR` set | Relative path resolved from wrong cwd, or dir is empty/missing | Use an absolute path; check server logs for the load summary |
 | 6 | One manifest missing from `GET /manifests` even though the file exists | Invalid YAML or schema mismatch; catalogue skips bad manifests rather than crashing the server | Check server logs for the parse error; fix the YAML; `POST /manifests/-/reload` |
@@ -252,11 +252,20 @@ SQLite needs to create the database file and, in WAL mode, the
 `-wal` and `-shm` sidecar files next to it. A relative
 `NTHLAYER_STORE_PATH` (or the default `nthlayer.db`) resolves against
 the server's cwd at startup; if that directory is read-only the open
-fails on the first write request, not at startup. The fix is either
-`NTHLAYER_STORE_PATH=/tmp/nthlayer.db` (or any writable absolute path)
-or chdir to a writable directory before `exec`. Container images that
-run as a non-root user need a writable volume mounted at the store
-path.
+fails on the first write request, not at startup. The failure surfaces
+server-side as a structlog `core_store_error` event from
+`_store_error_response` (server.py:33) with the SQLite message in the
+log record; the client sees a generic `{"error": "internal_error"}`
+500. Grep the server log for `core_store_error` to confirm. The fix
+is to point `NTHLAYER_STORE_PATH` at a durable, writable absolute
+path — `/var/lib/nthlayer/store.db` is the conventional choice for a
+systemd unit (create the directory and chown it to the service user
+first) — or chdir to a writable directory before `exec`. For a
+quick unstick on a fresh install where you don't yet have
+`/var/lib/nthlayer` provisioned, `NTHLAYER_STORE_PATH=/tmp/nthlayer.db`
+works but does not survive reboot on distros where `/tmp` is tmpfs.
+Container images that run as a non-root user need a writable volume
+mounted at the store path.
 
 #### 4. Database locked
 
