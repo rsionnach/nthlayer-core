@@ -39,16 +39,21 @@ def _doc_section(heading: str) -> str:
     """Return the body of a markdown section by exact heading match.
 
     Body runs from the heading line to (but not including) the next heading
-    at the same level. Used so each parity check reads only its own section.
+    at the same level or higher. Heading is matched line-anchored so a deeper
+    heading reusing the wording (e.g. ``#### Environment variables``) doesn't
+    collide with the requested ``### Environment variables``.
     """
     text = _doc_text()
     hash_count = heading.count("#")
+    heading_re = re.compile(rf"^{re.escape(heading)} *$", re.MULTILINE)
     sibling_re = re.compile(rf"^#{{1,{hash_count}}} ", re.MULTILINE)
-    start = text.index(heading)
-    after_heading = start + len(heading)
-    rest = text[after_heading:]
-    m = sibling_re.search(rest)
-    end = after_heading + m.start() if m else len(text)
+    m = heading_re.search(text)
+    if m is None:
+        raise AssertionError(f"deploying.md missing heading: {heading}")
+    start = m.start()
+    after_heading = m.end()
+    sib = sibling_re.search(text, after_heading)
+    end = sib.start() if sib else len(text)
     return text[start:end]
 
 
@@ -61,8 +66,17 @@ def test_env_var_table_matches_source() -> None:
     section = _doc_section("### Environment variables")
     doc_vars = set(re.findall(r"`(NTHLAYER_[A-Z_]+)`", section))
 
+    # Cover all three idiomatic lookup forms — os.environ.get(), os.getenv(),
+    # and os.environ["..."] — so a refactor that switches form doesn't make
+    # the gate silently miss a new var.
     src = SERVER_SRC.read_text(encoding="utf-8")
-    src_vars = set(re.findall(r'os\.environ\.get\(\s*"(NTHLAYER_[A-Z_]+)"', src))
+    src_vars = set()
+    for pattern in (
+        r'os\.environ\.get\(\s*"(NTHLAYER_[A-Z_]+)"',
+        r'os\.getenv\(\s*"(NTHLAYER_[A-Z_]+)"',
+        r'os\.environ\[\s*"(NTHLAYER_[A-Z_]+)"\s*\]',
+    ):
+        src_vars.update(re.findall(pattern, src))
 
     assert doc_vars == src_vars, (
         f"In doc but not server.py: {sorted(doc_vars - src_vars)}\n"
