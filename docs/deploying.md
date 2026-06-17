@@ -59,10 +59,8 @@ returns an empty list.
 mkdir empty-dir
 ```
 
-You will stay in the current directory and pass `./empty-dir` as your
-manifests directory in step 4.
-
-This tutorial uses Option A from here on.
+This tutorial uses Option A from here on (Option B users substitute
+`./empty-dir` for `./examples` in step 4).
 
 ### 4. Start the server
 
@@ -158,10 +156,8 @@ The CLI surface is intentionally minimal: one subcommand (`serve`) with
 two flags (`--host`, `--port`) plus a top-level `--version`. The store
 path and manifests directory are configured via environment variables
 rather than flags by design — they are deployment-environment concerns
-(filesystem layout, persistent volumes, secret-style paths) rather than
-per-invocation choices, and keeping them off the CLI avoids encoding
-host paths in process supervisors and shell history. See Environment
-variables below.
+(filesystem layout, persistent volumes), not per-invocation choices.
+See Environment variables below.
 
 ### Environment variables
 
@@ -211,13 +207,12 @@ changed service names under `changed` and the resulting catalogue size
 under `total`.
 
 For manifest schema and authoring guidance, see the manifest authoring
-guide (tu04.3 — not yet published).
+guide (forthcoming).
 
 ### Troubleshooting
 
 Seven failure modes account for nearly every fresh-machine deployment
-problem. The table summarises the user-visible symptom; the paragraphs
-below name the underlying invariant and what to grep for in logs.
+problem. Table summarises symptoms; paragraphs below give the diagnosis.
 
 | # | Symptom | Cause | Fix |
 |---|---|---|---|
@@ -358,7 +353,7 @@ Litestream consumes. The canonical reference for configuration and
 operational guidance is the upstream documentation at
 <https://litestream.io>.
 
-#### The two processes
+#### Process layout
 
 `nthlayer serve` and `litestream replicate` run side-by-side, both
 pointed at the same SQLite file (the path in `NTHLAYER_STORE_PATH`).
