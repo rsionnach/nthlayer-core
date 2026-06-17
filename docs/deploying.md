@@ -31,7 +31,7 @@ nthlayer --version
 ```
 
 ```
-nthlayer X.Y.Z
+nthlayer 1.7.0
 ```
 
 ### 3. Choose a manifests directory
