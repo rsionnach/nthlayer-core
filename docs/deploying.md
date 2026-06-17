@@ -5,14 +5,14 @@
 ## Tutorial: zero to first verdict
 
 This tutorial takes you from a fresh machine to a running `nthlayer-core`
-server that has accepted and returned its first verdict. Plan on five
-minutes. Every command below has been executed end-to-end; the output
-shown is what you should see.
+server that has accepted and returned its first verdict. Plan on under
+fifteen minutes. Every command below has been executed end-to-end; the
+output shown is what you should see.
 
 ### 1. Install uv
 
-`nthlayer-core` is distributed on PyPI and easiest to install with
-[uv](https://docs.astral.sh/uv/), Astral's Python package manager.
+`nthlayer-core` is distributed on PyPI; this tutorial uses
+[uv](https://docs.astral.sh/uv/).
 
 Follow the upstream install instructions:
 <https://docs.astral.sh/uv/getting-started/installation/>. Any recent
@@ -31,14 +31,10 @@ nthlayer --version
 ```
 
 ```
-nthlayer 1.5.0
+nthlayer X.Y.Z
 ```
 
-(The `nthlayer` CLI entry point ships inside the `nthlayer-core`
-package; the version string above is the CLI's own, which lags the
-package version on PyPI.)
-
-### 3. Get a manifests directory
+### 3. Choose a manifests directory
 
 `nthlayer-core` serves a read-only catalogue of OpenSRM service
 manifests from a directory you point it at. For this tutorial you have
@@ -49,6 +45,7 @@ point the server at its `examples/` directory:
 
 ```bash
 git clone https://github.com/rsionnach/opensrm
+cd opensrm
 ```
 
 You will use `opensrm/examples/` as your manifests directory in
@@ -62,12 +59,14 @@ returns an empty list.
 mkdir empty-dir
 ```
 
-Pick whichever fits your evaluation. The rest of this tutorial uses
-Option A.
+You will stay in the current directory and pass `./empty-dir` as your
+manifests directory in step 4.
+
+This tutorial uses Option A from here on.
 
 ### 4. Start the server
 
-From inside the cloned `opensrm/` directory:
+From inside the `opensrm/` directory:
 
 ```bash
 NTHLAYER_MANIFESTS_DIR=./examples nthlayer serve
@@ -76,14 +75,15 @@ NTHLAYER_MANIFESTS_DIR=./examples nthlayer serve
 You should see the server come up on port 8000:
 
 ```
-INFO:     Started server process [99793]
+INFO:     Started server process [<pid>]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 ```
 
-> The server binds to `0.0.0.0` by default (all interfaces); the curl
-> commands below use `localhost:8000`, which reaches it.
+The server is ready when you see `Application startup complete.`
+
+> The server binds to `0.0.0.0` (all interfaces); `localhost:8000` reaches it.
 
 Leave the server running and open a second terminal for the next
 steps.
@@ -100,10 +100,9 @@ curl localhost:8000/health
 
 ### 6. Post a verdict
 
-A verdict is the unit of recorded outcome in NthLayer. The minimum
-fields `POST /verdicts` requires are `id`, `type`, and `created_at`;
-adding `service` and `outcome` makes the verdict useful to a worker
-later.
+A verdict is the unit of recorded outcome in NthLayer. `POST /verdicts`
+requires `id`, `type`, and `created_at`. Adding `service` and `outcome`
+makes the verdict useful to a worker downstream.
 
 ```bash
 curl -X POST localhost:8000/verdicts \
@@ -121,8 +120,6 @@ curl -X POST localhost:8000/verdicts \
 {"id":"verdict-001"}
 ```
 
-The HTTP status is `201 Created`.
-
 ### 7. Fetch the verdict by id
 
 ```bash
@@ -139,8 +136,6 @@ curl localhost:8000/verdicts/verdict-001
 curl localhost:8000/verdicts
 ```
 
-The response is a JSON array of verdict records:
-
 ```json
 [{"id":"verdict-001","type":"verdict.created","created_at":"2026-06-16T12:00:00Z","service":"demo-service","outcome":{"status":"pass"}}]
 ```
@@ -148,7 +143,7 @@ The response is a JSON array of verdict records:
 You now have a `nthlayer-core` server running on `localhost:8000`
 that has stored, returned, and listed a verdict. From here you can
 wire in a worker (see `nthlayer-workers`) or explore the rest of the
-API surface in the Reference section below.
+API surface via the OpenAPI spec at `GET /openapi.json`.
 
 ## Reference
 
