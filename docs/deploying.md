@@ -214,6 +214,113 @@ guide (tu04.3 — not yet published).
 
 ### Troubleshooting
 
+Seven failure modes account for nearly every fresh-machine deployment
+problem. The table summarises the user-visible symptom; the paragraphs
+below name the underlying invariant and what to grep for in logs.
+
+| # | Symptom | Cause | Fix |
+|---|---|---|---|
+| 1 | `nthlayer: command not found` after install | uv tool-shim dir not on `PATH` | `uv tool update-shell` (or add `~/.local/bin` to `PATH`) |
+| 2 | `OSError: [Errno 48] Address already in use` | Port 8000 taken | `nthlayer serve --port 8001` or kill the prior process |
+| 3 | `sqlite3.OperationalError: unable to open database file` | Cwd not writable, or `NTHLAYER_STORE_PATH` points at a missing dir | `NTHLAYER_STORE_PATH=/tmp/nthlayer.db` or chdir to a writable dir |
+| 4 | `sqlite3.OperationalError: database is locked` (persistent, not transient) | Two `nthlayer serve` processes on the same DB | Kill the duplicate; one writer per store. WAL + 5s busy-timeout handles transient contention, not two writers |
+| 5 | `GET /manifests` returns `[]` despite `NTHLAYER_MANIFESTS_DIR` set | Relative path resolved from wrong cwd, or dir is empty/missing | Use an absolute path; check server logs for the load summary |
+| 6 | One manifest missing from `GET /manifests` even though the file exists | Invalid YAML or schema mismatch; catalogue skips bad manifests rather than crashing the server | Check server logs for the parse error; fix the YAML; `POST /manifests/-/reload` |
+| 7 | Local `curl` works, remote `curl` times out | Cloud firewall / security group / host firewall blocks 8000 | Open the port, or bind `--host 127.0.0.1` and SSH-tunnel |
+
+#### 1. Command not found
+
+`uv tool install` writes a shim to `~/.local/bin` (Linux/macOS) and
+prints a warning if that directory is not on `PATH`. If you missed the
+warning, `uv tool update-shell` edits your shell rc to add it; opening
+a new terminal then resolves `nthlayer`. Verify with `which nthlayer`.
+On macOS with zsh, a stale `~/.zshrc` cache or a non-login shell can
+also hide the shim — `exec zsh -l` forces a re-read.
+
+#### 2. Port in use
+
+The exact error is `OSError: [Errno 48] Address already in use` on
+macOS and `[Errno 98]` on Linux. Confirm with `lsof -i :8000` (macOS)
+or `ss -ltnp 'sport = :8000'` (Linux); the output names the process
+holding the port. Either kill it or pass `--port 8001` (or any free
+port) to `nthlayer serve`. Re-running a backgrounded server without
+killing the prior process is the usual cause.
+
+#### 3. Store path not writable
+
+SQLite needs to create the database file and, in WAL mode, the
+`-wal` and `-shm` sidecar files next to it. A relative
+`NTHLAYER_STORE_PATH` (or the default `nthlayer.db`) resolves against
+the server's cwd at startup; if that directory is read-only the open
+fails on the first write request, not at startup. The fix is either
+`NTHLAYER_STORE_PATH=/tmp/nthlayer.db` (or any writable absolute path)
+or chdir to a writable directory before `exec`. Container images that
+run as a non-root user need a writable volume mounted at the store
+path.
+
+#### 4. Database locked
+
+The store opens with `PRAGMA journal_mode=WAL`,
+`PRAGMA synchronous=NORMAL`, and `PRAGMA busy_timeout=5000`
+(store.py:167–169). WAL allows concurrent readers alongside one
+writer, and the 5s busy-timeout absorbs transient contention from a
+single process's connection pool. A `database is locked` error that
+persists past 5s indicates two writers on the same file — typically a
+second `nthlayer serve` started against the same `NTHLAYER_STORE_PATH`.
+Kill the duplicate; the single-writer invariant is load-bearing. A
+stale `nthlayer.db-wal` file alone is not the cause and should not be
+deleted while any process holds the database open.
+
+#### 5. Manifests directory not loaded
+
+On startup the catalogue logs `catalogue_loaded` with `count=` and
+`directory=` (the resolved absolute path). If `count=0` and the
+`directory=` path is not what you intended, the relative
+`NTHLAYER_MANIFESTS_DIR` resolved against the wrong cwd. If the
+log line is missing entirely, the path does not exist or is not a
+directory — the catalogue silently treats this the same as unset
+(catalogue.py:51) and `GET /manifests` returns `[]`. Use an absolute
+path and confirm with `ls "$NTHLAYER_MANIFESTS_DIR"/*.y*ml`. Files
+under nested subdirectories are also ignored.
+
+#### 6. One manifest missing from the list
+
+The catalogue wraps each file's parse in `try/except` and logs
+`catalogue_load_failed` with `file=` and `error=` for the failure,
+then continues with the rest (catalogue.py:121). The server stays
+healthy and `GET /manifests` returns the manifests that did parse.
+Grep the server log for `catalogue_load_failed` to find the offending
+file and the parse error; fix the YAML and call
+`POST /manifests/-/reload` to pick it up without a restart. A manifest
+whose `name` field collides with another file's `name` will also
+appear "missing" — the later file wins in load order.
+
+#### 7. Remote curl times out
+
+`nthlayer serve` binds to `0.0.0.0:8000` by default, so a local
+`curl localhost:8000/health` returns `{"status":"ok"}` even when
+remote clients time out. The timeout (as opposed to a connection
+refused) is the tell: the SYN is being dropped, not rejected, which
+means a firewall — cloud provider security group, host `ufw`/`iptables`,
+or a corporate egress filter — is blocking 8000 inbound. Open the
+port for trusted CIDRs, or keep the server on `--host 127.0.0.1` and
+reach it through an SSH tunnel (`ssh -L 8000:localhost:8000 host`).
+Binding to `0.0.0.0` on an internet-exposed host without authentication
+is itself a hardening problem — see How-to: hardening for production.
+
+#### Out of scope for this table
+
+A few classes of failure are deliberately not covered here:
+
+- **LLM provider keys, worker errors, judgment failures** — `nthlayer-core`
+  has no LLM and no worker process; these surface only when workers
+  are deployed. See `nthlayer-workers`.
+- **TLS, reverse proxy, certificate renewal** — core speaks plain HTTP
+  by design. See How-to: hardening for production below.
+- **Authentication, authorization, rate limiting** — core has none in
+  v1.5; the deployment is expected to terminate auth at a reverse
+  proxy. See How-to: hardening for production below.
+
 ## How-to: hardening for production
 
 ### Durable storage with Litestream
