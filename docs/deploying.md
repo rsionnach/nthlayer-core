@@ -332,4 +332,121 @@ A few classes of failure are deliberately not covered here:
 
 ## How-to: hardening for production
 
+Core in v1.5 ships zero authentication, single-process SQLite, and no
+built-in backup. This how-to covers the one prod-hardening step with an
+upstream-recommended pattern: durable storage via Litestream. Auth,
+TLS, process supervision, and multi-region topology are deliberately
+out of scope and pointed at your existing infrastructure — see "What
+this guide does not cover" at the end.
+
 ### Durable storage with Litestream
+
+> **Note.** This procedure is documented from upstream Litestream sources;
+> end-to-end validation against real S3 storage is tracked in follow-up bead
+> `opensrm-tu04.2.2`.
+
+#### Why Litestream specifically
+
+[Litestream](https://litestream.io) streams the SQLite write-ahead log
+to S3-compatible object storage with no application changes: core
+writes to SQLite normally and Litestream replicates the WAL underneath.
+We recommend it because v1.5 core has no backup primitive of its own
+and the WAL mode it already uses (`journal_mode=WAL` with
+`synchronous=NORMAL`, see Troubleshooting row 4) is exactly the format
+Litestream consumes. The canonical reference for configuration and
+operational guidance is the upstream documentation at
+<https://litestream.io>.
+
+#### The two processes
+
+`nthlayer serve` and `litestream replicate` run side-by-side, both
+pointed at the same SQLite file (the path in `NTHLAYER_STORE_PATH`).
+There are two patterns.
+
+**Raw two-process.** Run each command in its own terminal or its own
+systemd unit, both pointed at the same path:
+
+```bash
+# Terminal 1 (or systemd unit nthlayer-core.service)
+NTHLAYER_STORE_PATH=/var/lib/nthlayer/store.db nthlayer serve
+
+# Terminal 2 (or systemd unit nthlayer-litestream.service)
+litestream replicate -config /etc/litestream.yml
+```
+
+**Wrapper.** Let Litestream supervise the serve process via `-exec`:
+
+```bash
+litestream replicate -config /etc/litestream.yml -exec "nthlayer serve"
+```
+
+The wrapper pattern is recommended: it gives single-process semantics
+for your supervisor, and Litestream exits cleanly if either side dies,
+so a process-supervisor restart re-establishes both halves together.
+
+#### Minimal `litestream.yml`
+
+The placeholders below are illustrative — substitute your own bucket,
+region, endpoint, and credentials.
+
+```yaml
+dbs:
+  - path: /var/lib/nthlayer/store.db
+    replicas:
+      - type: s3
+        bucket: YOUR_BUCKET
+        path: nthlayer-core
+        endpoint: https://s3.amazonaws.com
+        access-key-id: ${AWS_ACCESS_KEY_ID}
+        secret-access-key: ${AWS_SECRET_ACCESS_KEY}
+```
+
+The `path:` value matches the durable store path established in
+Troubleshooting row 3. See Litestream's docs at <https://litestream.io>
+for the full configuration schema, including non-S3 replica types and
+retention tuning.
+
+#### Restore procedure
+
+To recover the database from the replica:
+
+```bash
+litestream restore -o /var/lib/nthlayer/store.db s3://YOUR_BUCKET/nthlayer-core
+```
+
+You would run this in two situations: cold-starting a new VM that has
+no local store yet, or recovering from disk loss on the existing host.
+The server must not be running while the restore is in progress —
+Litestream and `nthlayer serve` both want to own the SQLite file, and
+overlapping ownership corrupts the restore.
+
+#### What this does NOT give you
+
+- **Not HA.** The single-writer invariant is preserved; replicas are
+  cold object-storage copies, not warm standbys ready to take writes.
+- **Not point-in-time-with-zero-data-loss.** The recovery bound is the
+  last replicated WAL frame — typically under a second of lag, but not
+  zero. Writes acknowledged by core in the final sub-second before a
+  crash may not be in the replica.
+- **Not multi-writer.** Core remains the sole writer; Litestream does
+  not enable horizontal scale or active-active topology.
+
+If you need stronger guarantees than these, Litestream is not the right
+tool and v1.5 core is not the right runtime — escalate to a
+Postgres-backed v2 or a fully different storage layer.
+
+#### What this guide does not cover
+
+The following production topics are deliberate non-goals for this
+guide, not future-TODO links:
+
+- **Auth, TLS, reverse proxy** — front core with your existing gateway
+  (Cloudflare, Caddy, nginx, ALB). Core speaks plain HTTP by design.
+- **Process supervision (systemd / docker-compose / k8s)** — pick your
+  platform's pattern. The wrapper form in "The two processes" above is
+  supervisor-friendly: one process to supervise, clean exit on failure.
+- **Multi-region / read replicas / HA** — out of scope for v1.5 core.
+  The single-writer invariant precludes active-active.
+- **Migrating an existing `nthlayer.db` into a Litestream-replicated
+  setup** — out of scope for this bead; document when a real user
+  asks.
