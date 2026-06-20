@@ -6,6 +6,18 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [1.8.0](https://github.com/rsionnach/nthlayer-core/compare/v1.7.0...v1.8.0) (2026-06-19)
+
+
+### Features
+
+* **tu04.2.1:** drift gate for deploying.md against source ([3d9e3eb](https://github.com/rsionnach/nthlayer-core/commit/3d9e3eb469129348446e05d704fa63d4e4e350d1))
+
+
+### Documentation
+
+* **tu04.2:** drop X.Y.Z placeholder; nthlayer --version now reports correctly ([2752532](https://github.com/rsionnach/nthlayer-core/commit/27525324ccb8a2c48e27828a0e40c92fce464cc0))
+
 ## [1.7.0](https://github.com/rsionnach/nthlayer-core/compare/v1.6.0...v1.7.0) (2026-06-17)
 
 
