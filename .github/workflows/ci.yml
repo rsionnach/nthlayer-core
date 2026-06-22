@@ -37,12 +37,12 @@ jobs:
 
     steps:
       - name: Checkout nthlayer-core
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: nthlayer-core
 
       - name: Checkout nthlayer-common (sibling)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: rsionnach/nthlayer-common
           path: nthlayer-common
@@ -68,12 +68,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout nthlayer-core
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: nthlayer-core
 
       - name: Checkout nthlayer-common (sibling)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: rsionnach/nthlayer-common
           path: nthlayer-common
