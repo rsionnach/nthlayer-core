@@ -6,6 +6,13 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [1.8.1](https://github.com/rsionnach/nthlayer-core/compare/v1.8.0...v1.8.1) (2026-07-05)
+
+
+### Documentation
+
+* add contributing guide (opensrm-tu04.4) ([6b43a51](https://github.com/rsionnach/nthlayer-core/commit/6b43a51aa827cf3292cb535f9119986fd0df0794))
+
 ## [1.8.0](https://github.com/rsionnach/nthlayer-core/compare/v1.7.0...v1.8.0) (2026-06-19)
 
 
