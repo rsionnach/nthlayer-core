@@ -27,7 +27,12 @@ from packaging.utils import canonicalize_name
 from packaging.version import Version
 
 DISTRIBUTION = "nthlayer-core"
+
+# Siblings are dependencies under this prefix plus the front door itself:
+# canonicalize_name("nthlayer") is "nthlayer" and does NOT start with
+# "nthlayer-", so prefix matching alone would miss a real member.
 SIBLING_PREFIX = "nthlayer-"
+FRONT_DOOR = "nthlayer"
 
 # Each sibling mapped to the MAJOR this repo is developed against. Stated
 # independently rather than derived from the declared range — deriving it would
@@ -53,7 +58,9 @@ def _sibling_requirements() -> dict[str, Requirement]:
     """
     reqs = _unconditional_requirements()
     return {
-        n: r for n, r in reqs.items() if n.startswith(SIBLING_PREFIX)
+        n: r
+        for n, r in reqs.items()
+        if n == FRONT_DOOR or n.startswith(SIBLING_PREFIX)
     }
 
 
@@ -83,7 +90,8 @@ def test_at_least_one_sibling_was_discovered():
     """
     assert SIBLINGS, (
         f"{DISTRIBUTION} declares no unconditional dependency under "
-        f"'{SIBLING_PREFIX}'; every version check here would silently skip"
+        f"'{SIBLING_PREFIX}' or named '{FRONT_DOOR}'; every version check here "
+        f"would silently skip"
     )
 
 
@@ -157,4 +165,16 @@ def test_installed_sibling_is_the_major_this_code_was_written_against(name):
         f"declared range in pyproject.toml admits a major nothing here has run "
         f"— the exact shape of opensrm-p3bm, where <2.0.0 shipped while 2.1.2 "
         f"was under test."
+    )
+
+
+def test_expected_majors_has_no_stale_entries():
+    """The reverse of the coverage check: config for a dependency since removed.
+
+    Dead config only — nothing goes vacuous — but a stale entry in a file whose
+    subject is drift would be an odd thing to leave rotting.
+    """
+    stale = sorted(set(EXPECTED_MAJORS) - set(SIBLINGS))
+    assert not stale, (
+        f"EXPECTED_MAJORS names {stale}, which {DISTRIBUTION} no longer declares"
     )

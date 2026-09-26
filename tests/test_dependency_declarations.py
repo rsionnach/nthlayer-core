@@ -31,10 +31,18 @@ from packaging.utils import canonicalize_name
 
 PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 
-# Ecosystem siblings are exactly the dependencies under this prefix. Discovery
-# by prefix rather than by name means a newly added sibling is guarded the day
-# it is declared, with no second list to remember.
+# Ecosystem siblings are the dependencies under this prefix, plus the front door
+# itself: canonicalize_name("nthlayer") is "nthlayer", which does NOT start with
+# "nthlayer-", so prefix matching alone would miss a real member. Discovery
+# rather than a hand-listed roster means a newly added sibling is guarded the day
+# it is declared. (`opensrm` is deliberately absent — it ships no Python package,
+# so it can never be a dependency here.)
 SIBLING_PREFIX = "nthlayer-"
+FRONT_DOOR = "nthlayer"
+
+
+def _is_sibling(canonical_name: str) -> bool:
+    return canonical_name == FRONT_DOOR or canonical_name.startswith(SIBLING_PREFIX)
 
 # Operators that bound a range from above. "~=" is here on measurement, not on
 # reasoning: packaging exposes a compatible-release specifier as the single
@@ -48,6 +56,11 @@ BOUNDING_OPERATORS = ("<", "<=", "==", "===", "~=")
 # A version no realistic range admits. Lets the cross-check below ask a
 # specifier what it actually does about the far future, instead of hardcoding
 # one major and false-failing any case that lives at another.
+#
+# Epoch-blind by decision: "9999.0.0" is below any 1!x version, so a bounded
+# epoch ceiling such as `<1!3.0` would false-fail the cross-check. Left alone
+# because no sibling has ever used an epoch and there is no honest way to
+# exercise the branch that would handle it.
 UNBOUNDED_PROBE = "9999.0.0"
 
 
@@ -66,7 +79,7 @@ def _siblings() -> dict[str, Requirement]:
     return {
         canonicalize_name(r.name): r
         for r in _declared()
-        if canonicalize_name(r.name).startswith(SIBLING_PREFIX)
+        if _is_sibling(canonicalize_name(r.name))
     }
 
 
@@ -85,7 +98,8 @@ def test_at_least_one_sibling_is_guarded():
     catching silent drift must not be able to go quiet itself.
     """
     assert SIBLINGS, (
-        f"no dependency under '{SIBLING_PREFIX}' found in {PYPROJECT.name}; "
+        f"no dependency under '{SIBLING_PREFIX}' or named '{FRONT_DOOR}' "
+        f"found in {PYPROJECT.name}; "
         f"every check in this file would silently skip"
     )
 
