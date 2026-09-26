@@ -156,10 +156,20 @@ def test_declared_floor_is_the_version_under_test(name):
     The installed version is the only version under test, so it is the only
     floor that admits nothing untested.
 
-    Consequence, intended: a new sibling release turns this red until the floor
-    is deliberately bumped. That friction is the point — the declaration drifted
+    Consequence, intended: the floor must be deliberately bumped when the
+    sibling advances. That friction is the point — the declaration drifted
     silently for four minor releases precisely because nothing demanded the
-    edit. Loosen this only on purpose, and record why.
+    edit. Loosen this only on purpose, and record why. In particular do NOT
+    relax it to a major-or-minor comparison: `>=2.1.0` while 2.1.2 is tested is
+    the same hole as `>=1.5.0`, one coordinate smaller.
+
+    Where the red actually appears, which is not where you would guess:
+    .github/workflows/ci.yml checks out rsionnach/nthlayer-common with no `ref`,
+    so CI builds against that repo's floating main. This test therefore goes red
+    when common's version-bump commit lands on ITS main — before any PyPI
+    release, triggered by a commit in another repository. If you are debugging
+    that failure from inside nthlayer-core, the change you are looking for is
+    not here.
     """
     specifier = _siblings()[name].specifier
     installed = version(name)
