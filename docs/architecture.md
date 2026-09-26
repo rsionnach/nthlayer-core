@@ -364,3 +364,11 @@ without a ceiling.
 
 CLAUDE.md hard rule 10 states the resulting invariant. The two guards that
 enforce it are listed under Test suite below.
+
+The same two guards are copied verbatim into `nthlayer-bench` and
+`nthlayer-override-adapter`, which had the identical defect. That duplication
+is deliberate: the smoke guard runs inside a release container holding only the
+wheel, `pytest` and `packaging`, so a shared helper living in any sibling repo
+is simply absent there. Sharing it would mean publishing a ninth distribution
+and making it a runtime dependency of three wheels — more surface than three
+copies cost. If anything is centralised, centralise the rule, not the code.
