@@ -1,19 +1,20 @@
 """Smoke test: the version actually installed, against what the artifact asked for.
 
-Runs inside the release container, where the wheel was installed with
-`pip install /dist/*.whl` and every dependency came from PyPI. That is the only
-place in this repo's pipeline where the PUBLISHED dependency ranges are the ones
-in force — everywhere else `tool.uv.sources` substitutes the sibling checkout.
+Runs in the normal suite AND in the release container. It is DECISIVE in the
+container, because that is the only place in this pipeline where the published
+ranges are the ones in force: the wheel is installed with
+`pip install /dist/*.whl` and every dependency comes from PyPI, whereas
+everywhere else `tool.uv.sources` substitutes the sibling checkout.
 
-This container gate already existed and did not catch opensrm-p3bm, because
-resolving from the registry is not the same as checking WHAT it resolved. The
-wheel declared `nthlayer-common>=1.5.0,<2.0.0`, pip dutifully installed 1.7.0,
-the import and CLI smoke tests passed — and they would have passed on either
-major, because none of them assert a version. A range that is wrong but
-satisfiable produces a green container.
+Reads installed metadata rather than pyproject.toml because that metadata is
+what consumers actually get — true in both environments. Its sibling
+tests/test_dependency_declarations.py reads the source of truth instead, so the
+two disagree exactly when a build is stale.
 
-Reads only installed metadata, never pyproject.toml: the source tree is not
-mounted here, and the wheel's own metadata is the artifact consumers get.
+Why this file exists: the container gate already ran and missed opensrm-p3bm.
+Resolving from the registry is not the same as checking WHAT it resolved, and
+no pre-existing smoke test asserts a version, so a range that is wrong but
+satisfiable produced a green container.
 """
 from __future__ import annotations
 
@@ -25,24 +26,27 @@ from packaging.version import Version
 
 DISTRIBUTION = "nthlayer-core"
 
-# Siblings whose resolved version this asserts on. Names only — an expected
-# version pinned here would need updating in lockstep with pyproject.toml and
-# would be the copy that drifts.
-SIBLING_DEPS = ("nthlayer-common",)
-
-# The major each sibling is developed against — an independent statement of
-# intent, which is the whole point: deriving it from the declared range would
-# make the test agree with whatever the range says, including a wrong one.
+# Each sibling mapped to the MAJOR this repo is developed against. Stated
+# independently rather than derived from the declared range — deriving it would
+# make the test agree with whatever the range says, including a wrong one. Only
+# the major, so ordinary minor and patch upgrades flow through untouched.
 EXPECTED_MAJORS = {"nthlayer-common": 2}
 
 
 def _declared_requirements() -> dict[str, Requirement]:
-    """The ranges the built wheel actually shipped, per its own metadata."""
+    """The unconditional ranges the built wheel shipped, per its own metadata.
+
+    Marker-guarded requirements are dropped: they apply only on some
+    interpreters or extras, so "the installed version satisfies this" is not a
+    claim that holds environment-independently. Every sibling in
+    EXPECTED_MAJORS is unconditional, and the `name in declared` assertion below
+    fails loudly if one ever stops being.
+    """
     reqs = (Requirement(r) for r in (distribution(DISTRIBUTION).requires or []))
     return {r.name: r for r in reqs if not r.marker}
 
 
-@pytest.mark.parametrize("name", SIBLING_DEPS)
+@pytest.mark.parametrize("name", EXPECTED_MAJORS)
 def test_installed_version_satisfies_the_artifact_metadata(name):
     """Reads the BUILT artifact's metadata, not pyproject.toml.
 
@@ -61,7 +65,7 @@ def test_installed_version_satisfies_the_artifact_metadata(name):
     assert version(name) in declared[name].specifier
 
 
-@pytest.mark.parametrize("name", SIBLING_DEPS)
+@pytest.mark.parametrize("name", EXPECTED_MAJORS)
 def test_installed_sibling_is_the_major_this_code_was_written_against(name):
     """The assertion the container gate was missing.
 

@@ -1,20 +1,15 @@
 """The declared dependency ranges must admit the versions actually in use.
 
-This file exists because nothing else checks that claim, and it diverged
-silently for four minor releases (opensrm-p3bm).
+Reads pyproject.toml, the source of truth, and fails locally the moment a
+sibling outgrows the declared range. Its counterpart
+tests/smoke/test_resolved_dependencies.py reads the BUILT artifact's metadata
+instead and is decisive in the release container.
 
-`tool.uv.sources` points nthlayer-common at the sibling checkout, and a path
-source REPLACES registry resolution rather than being filtered by the version
-specifier. So `uv sync` and `uv pip install .` both install whatever the
-sibling happens to be — 2.1.2 — while `project.dependencies` said
-`>=1.5.0,<2.0.0`. Neither command warns. Only `uv pip install --no-sources`
-exercises the published range, and nothing ran it.
-
-What that cost: `pip install nthlayer-workers==2.0.0 nthlayer-core` does not
-fail. The resolver silently walks core back to 1.0.0 — the only published core
-with no upper bound on common, hence the only one admitting the >=2.1.2 that
-workers 2.0.0 requires. The install succeeds, the versions look plausible, and
-the user gets a core eight minor versions stale.
+The full account of why both exist is nthlayer-core CLAUDE.md hard rule 10
+[opensrm-p3bm]. The short version: `tool.uv.sources` points nthlayer-common at
+the sibling checkout, a path source REPLACES registry resolution rather than
+being filtered by the version specifier, and nothing warned that the declared
+range and the tested version had diverged.
 """
 from __future__ import annotations
 
