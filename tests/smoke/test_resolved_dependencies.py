@@ -21,6 +21,7 @@ from importlib.metadata import distribution, version
 
 import pytest
 from packaging.requirements import Requirement
+from packaging.version import Version
 
 DISTRIBUTION = "nthlayer-core"
 
@@ -73,7 +74,10 @@ def test_installed_sibling_is_the_major_this_code_was_written_against(name):
     through without touching this test.
     """
     installed = version(name)
-    major = int(installed.split(".", 1)[0])
+    # Version().major, not int(split(".")[0]): an epoch version like 1!2.0.0
+    # makes the naive split yield "1!2" and raise ValueError, so the gate would
+    # die on a traceback instead of the assertion message below.
+    major = Version(installed).major
     expected = EXPECTED_MAJORS[name]
     assert major == expected, (
         f"{name} resolved from the registry to {installed} (major {major}), but "

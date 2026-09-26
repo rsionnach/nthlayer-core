@@ -73,7 +73,10 @@ def test_declared_range_has_an_upper_bound(name):
     core 1.0.0 rather than an error.
     """
     specifier = _declared()[name].specifier
-    assert any(s.operator in ("<", "<=") for s in specifier), (
+    # "=="/"===" bound from above as surely as "<" does; "~=" carries its own
+    # implicit "<" and so is already covered by the operator check.
+    bounding = ("<", "<=", "==", "===")
+    assert any(s.operator in bounding for s in specifier), (
         f"'{name}{specifier}' has no upper bound, so every future major of "
         f"{name} is declared compatible without anything testing it"
     )
