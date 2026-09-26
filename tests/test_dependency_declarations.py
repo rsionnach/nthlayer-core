@@ -28,6 +28,7 @@ import pytest
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
+from packaging.version import Version
 
 PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 
@@ -137,6 +138,43 @@ def test_declared_range_admits_the_installed_sibling(name):
         f"project.dependencies declares '{name}{specifier}', which excludes "
         f"it. Publishing this means consumers resolve a version no test here "
         f"has ever run. Widen the declared range, or pin the sibling back."
+    )
+
+
+@pytest.mark.parametrize("name", SIBLINGS)
+def test_declared_floor_is_the_version_under_test(name):
+    """The floor must admit nothing this repo has never run.
+
+    test_declared_range_admits_the_installed_sibling checks the range does not
+    EXCLUDE the tested version; this checks it does not admit versions BELOW it.
+    Both are needed. Measured: `>=1.5.0,<3.0.0` passes every other check in this
+    file — the ceiling is present, 2.1.2 is inside the range, and the container
+    resolves the newest so the major assertion sees 2 — while letting a consumer
+    resolve this package against common 1.7.0. That is opensrm-p3bm restored,
+    with the guards reading as though it were covered.
+
+    The installed version is the only version under test, so it is the only
+    floor that admits nothing untested.
+
+    Consequence, intended: a new sibling release turns this red until the floor
+    is deliberately bumped. That friction is the point — the declaration drifted
+    silently for four minor releases precisely because nothing demanded the
+    edit. Loosen this only on purpose, and record why.
+    """
+    specifier = _siblings()[name].specifier
+    installed = version(name)
+
+    floors = [s.version for s in specifier if s.operator == ">="]
+    assert len(floors) == 1, (
+        f"'{name}{specifier}' declares {len(floors)} '>=' bounds; this guard "
+        f"reads exactly one. A pin or compatible-release form needs its own "
+        f"check rather than passing silently."
+    )
+    assert Version(floors[0]) == Version(installed), (
+        f"{name} floor is declared '>={floors[0]}' but the version installed "
+        f"and tested against is {installed}. Everything between them is "
+        f"published as supported and has never been run here — the shape of "
+        f"opensrm-p3bm. Bump the floor, or pin the sibling back to {floors[0]}."
     )
 
 
