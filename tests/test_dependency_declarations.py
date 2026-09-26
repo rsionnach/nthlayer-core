@@ -90,13 +90,10 @@ SIBLINGS = sorted(_siblings())
 
 
 def test_at_least_one_sibling_is_guarded():
-    """Non-vacuity floor for every parametrised test in this file.
+    """Non-vacuity floor for every parametrised test here.
 
-    An empty parametrise list is reported as `1 skipped` with exit 0. Measured,
-    not assumed. Two bugs in this workspace have already shipped behind exactly
-    that — a module that skipped itself when a path lookup missed, and a
-    predicate whose fixture shape was unreal — so a file whose whole purpose is
-    catching silent drift must not be able to go quiet itself.
+    An empty parametrise list reports `1 skipped` and exits 0 (measured), so
+    without this the file could go quiet instead of red.
     """
     assert SIBLINGS, (
         f"no dependency under '{SIBLING_PREFIX}' or named '{FRONT_DOOR}' "
@@ -106,13 +103,10 @@ def test_at_least_one_sibling_is_guarded():
 
 
 def test_no_sibling_is_declared_twice():
-    """A duplicate entry silently last-wins, and can ship the broken range.
+    """A duplicate silently last-wins, so the range checked need not be shipped.
 
-    A name-keyed dict keeps whichever comes last. Measured:
-    `[nthlayer-common>=2.1.2,<3.0.0, nthlayer-common<2.0.0]` collapses to
-    `<2.0.0` — so a leftover second entry has the guard verify one range while
-    the wheel ships another, and in that ordering the old broken ceiling passes
-    green.
+    Measured: `[nthlayer-common>=2.1.2,<3.0.0, nthlayer-common<2.0.0]` keyed by
+    name collapses to `<2.0.0`.
     """
     names = [canonicalize_name(r.name) for r in _declared()]
     duplicated = sorted(n for n, count in Counter(names).items() if count > 1)
@@ -184,7 +178,10 @@ def test_declared_floor_is_the_version_under_test(name):
         f"{name} floor is declared '>={floors[0]}' but the version installed "
         f"and tested against is {installed}. Everything between them is "
         f"published as supported and has never been run here — the shape of "
-        f"opensrm-p3bm. Bump the floor, or pin the sibling back to {floors[0]}."
+        f"opensrm-p3bm. Confirm nthlayer-common's CHANGELOG carries no break "
+        f"for this repo, THEN bump the floor to {installed} — or pin the "
+        f"sibling back to {floors[0]}. Widening the published range to make "
+        f"this pass is how the bug got here."
     )
 
 

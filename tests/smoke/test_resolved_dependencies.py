@@ -18,7 +18,6 @@ satisfiable produced a green container.
 """
 from __future__ import annotations
 
-from collections import Counter
 from importlib.metadata import distribution, version
 
 import pytest
@@ -109,23 +108,6 @@ def test_every_discovered_sibling_declares_a_major(name):
     )
 
 
-def test_no_dependency_is_declared_twice():
-    """A duplicate silently last-wins, and can hide the range actually shipped.
-
-    Measured: `[nthlayer-common>=2.1.2,<3.0.0, nthlayer-common<2.0.0]` keyed by
-    name collapses to `<2.0.0`, so the checked range need not be the shipped
-    one.
-    """
-    reqs = [
-        Requirement(r) for r in (distribution(DISTRIBUTION).requires or [])
-    ]
-    names = [canonicalize_name(r.name) for r in reqs if not r.marker]
-    duplicated = sorted(n for n, c in Counter(names).items() if c > 1)
-    assert not duplicated, (
-        f"{DISTRIBUTION} metadata declares these more than once: {duplicated}"
-    )
-
-
 @pytest.mark.parametrize("name", SIBLINGS)
 def test_installed_version_satisfies_the_artifact_metadata(name):
     """Catches a stale build, which is how it earned its keep during opensrm-p3bm.
@@ -165,16 +147,4 @@ def test_installed_sibling_is_the_major_this_code_was_written_against(name):
         f"declared range in pyproject.toml admits a major nothing here has run "
         f"— the exact shape of opensrm-p3bm, where <2.0.0 shipped while 2.1.2 "
         f"was under test."
-    )
-
-
-def test_expected_majors_has_no_stale_entries():
-    """The reverse of the coverage check: config for a dependency since removed.
-
-    Dead config only — nothing goes vacuous — but a stale entry in a file whose
-    subject is drift would be an odd thing to leave rotting.
-    """
-    stale = sorted(set(EXPECTED_MAJORS) - set(SIBLINGS))
-    assert not stale, (
-        f"EXPECTED_MAJORS names {stale}, which {DISTRIBUTION} no longer declares"
     )

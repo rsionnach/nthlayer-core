@@ -93,23 +93,19 @@ contract, or violate the "core is the only writer" invariant.
    case. Pinned by `TestRetentionGuards`. Do not relax these
    without an explicit spec change.
 
-10. **Declared dependency ranges must admit the version under test.**
-    `tool.uv.sources` points `nthlayer-common` at the sibling checkout, and a
-    path source REPLACES registry resolution rather than being filtered by the
-    version specifier — so `uv sync` and `uv pip install .` install the sibling
-    whatever `project.dependencies` says. This repo shipped
-    `nthlayer-common>=1.5.0,<2.0.0` while testing 2.1.2 for four minor
-    releases; only `uv pip install --no-sources` exercises the published range.
-    Two guards, deliberately reading different things:
-    `tests/test_dependency_declarations.py` reads `pyproject.toml` (the source
-    of truth) and fails locally the moment the sibling outgrows the range;
-    `tests/smoke/test_resolved_dependencies.py` reads the BUILT artifact's
-    metadata and is decisive in the release container, where deps come from
-    PyPI — it asserts the resolved MAJOR, because the pre-existing container
-    gate resolved from the registry without ever checking what it resolved, and
-    a range that is wrong but satisfiable produces a green container. Do not
-    derive the expected major from the declared range; that makes the test
-    agree with a wrong range [opensrm-p3bm].
+10. **A declared dependency range must admit exactly the versions tested.**
+    Not the oldest that imports, not a future major. The floor equals the
+    installed sibling and there is always a ceiling — anything wider publishes
+    support for versions nothing here has run. Enforced by two guards that
+    read deliberately different things:
+    `tests/test_dependency_declarations.py` reads `pyproject.toml` and fails
+    locally; `tests/smoke/test_resolved_dependencies.py` reads the BUILT
+    artifact's metadata and is decisive in the release container, where
+    dependencies resolve from PyPI. Do not derive the expected major from the
+    declared range — that makes the test agree with a wrong range. Why the
+    range can drift unnoticed at all, and what it cost:
+    `docs/architecture.md` → "Why the nthlayer-common range needs guarding"
+    [opensrm-p3bm].
 
 ## Where to find detail
 
