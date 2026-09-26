@@ -11,7 +11,8 @@ requires-python = ">=3.11"
 dependencies = [
     # Floor is the version this repo is built and tested against, NOT the
     # oldest one that happens to import. Guarded by
-    # tests/test_dependency_declarations.py and tests/smoke/; see CLAUDE.md
+    # tests/test_dependency_declarations.py and
+    # tests/smoke/test_resolved_dependencies.py; see CLAUDE.md
     # hard rule 10 for why both are needed [opensrm-p3bm].
     "nthlayer-common>=2.1.2,<3.0.0",
     "starlette>=0.40",

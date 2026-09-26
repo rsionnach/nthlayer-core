@@ -46,16 +46,12 @@ def _declared_requirements() -> dict[str, Requirement]:
     return {r.name: r for r in reqs if not r.marker}
 
 
-@pytest.mark.parametrize("name", EXPECTED_MAJORS)
+@pytest.mark.parametrize("name", sorted(EXPECTED_MAJORS))
 def test_installed_version_satisfies_the_artifact_metadata(name):
-    """Reads the BUILT artifact's metadata, not pyproject.toml.
+    """Catches a stale build, which is how it earned its keep during opensrm-p3bm.
 
-    That distinction earned itself immediately: editing pyproject.toml and
-    re-locking without re-syncing leaves the installed dist-info carrying the
-    old range, and this test is what says so. Its sibling in
-    tests/test_dependency_declarations.py reads the source of truth; this one
-    reads what was actually built from it, and the two disagree exactly when a
-    build is stale.
+    Editing pyproject.toml and re-locking without re-syncing leaves the
+    installed dist-info carrying the old range. This test is what said so.
     """
     declared = _declared_requirements()
     assert name in declared, (
@@ -65,7 +61,7 @@ def test_installed_version_satisfies_the_artifact_metadata(name):
     assert version(name) in declared[name].specifier
 
 
-@pytest.mark.parametrize("name", EXPECTED_MAJORS)
+@pytest.mark.parametrize("name", sorted(EXPECTED_MAJORS))
 def test_installed_sibling_is_the_major_this_code_was_written_against(name):
     """The assertion the container gate was missing.
 
