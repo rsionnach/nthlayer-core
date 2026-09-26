@@ -18,22 +18,31 @@ satisfiable produced a green container.
 """
 from __future__ import annotations
 
+from collections import Counter
 from importlib.metadata import distribution, version
 
 import pytest
 from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 from packaging.version import Version
 
 DISTRIBUTION = "nthlayer-core"
+SIBLING_PREFIX = "nthlayer-"
 
 # Each sibling mapped to the MAJOR this repo is developed against. Stated
 # independently rather than derived from the declared range — deriving it would
 # make the test agree with whatever the range says, including a wrong one. Only
 # the major, so ordinary minor and patch upgrades flow through untouched.
+#
+# This is NOT the roster of what gets checked. The roster is discovered from the
+# artifact's own metadata, and test_every_discovered_sibling_declares_a_major
+# fails if a sibling appears in the metadata without an entry here — so adding a
+# dependency forces someone to state its expected major rather than quietly
+# leaving it unguarded.
 EXPECTED_MAJORS = {"nthlayer-common": 2}
 
 
-def _declared_requirements() -> dict[str, Requirement]:
+def _sibling_requirements() -> dict[str, Requirement]:
     """The unconditional ranges the built wheel shipped, per its own metadata.
 
     Marker-guarded requirements are dropped: they apply only on some
@@ -42,18 +51,81 @@ def _declared_requirements() -> dict[str, Requirement]:
     EXPECTED_MAJORS is unconditional, and the `name in declared` assertion below
     fails loudly if one ever stops being.
     """
+    reqs = _unconditional_requirements()
+    return {
+        n: r for n, r in reqs.items() if n.startswith(SIBLING_PREFIX)
+    }
+
+
+def _unconditional_requirements() -> dict[str, Requirement]:
+    """Canonical-name -> requirement for every unconditional dep of the artifact.
+
+    Names are canonicalised: a requirement spelled `nthlayer_common` reports
+    that verbatim and would otherwise read as a different package.
+    """
     reqs = (Requirement(r) for r in (distribution(DISTRIBUTION).requires or []))
-    return {r.name: r for r in reqs if not r.marker}
+    return {canonicalize_name(r.name): r for r in reqs if not r.marker}
 
 
-@pytest.mark.parametrize("name", sorted(EXPECTED_MAJORS))
+# Evaluated at collection time, from the installed artifact's metadata. Empty
+# would make the parametrised tests skip rather than fail, which
+# test_at_least_one_sibling_was_discovered prevents.
+SIBLINGS = sorted(_sibling_requirements())
+
+
+def test_at_least_one_sibling_was_discovered():
+    """Non-vacuity floor. An empty parametrise list is `1 skipped`, exit 0.
+
+    Measured, not assumed. This repo has shipped two bugs behind a test that
+    passed by never running, so the guard against silent drift must not be able
+    to go silent. If this fails, the artifact's metadata lost its sibling
+    requirements — a packaging fault, not a version fault.
+    """
+    assert SIBLINGS, (
+        f"{DISTRIBUTION} declares no unconditional dependency under "
+        f"'{SIBLING_PREFIX}'; every version check here would silently skip"
+    )
+
+
+@pytest.mark.parametrize("name", SIBLINGS)
+def test_every_discovered_sibling_declares_a_major(name):
+    """Adding a sibling dependency must force a decision about its major.
+
+    Without this, EXPECTED_MAJORS could fall behind the dependency list and a
+    newly added sibling would be unguarded by construction — the same drift
+    this file exists to catch, one coordinate over.
+    """
+    assert name in EXPECTED_MAJORS, (
+        f"{name} is an unconditional dependency of {DISTRIBUTION} but has no "
+        f"entry in EXPECTED_MAJORS, so nothing checks which major resolves"
+    )
+
+
+def test_no_dependency_is_declared_twice():
+    """A duplicate silently last-wins, and can hide the range actually shipped.
+
+    Measured: `[nthlayer-common>=2.1.2,<3.0.0, nthlayer-common<2.0.0]` keyed by
+    name collapses to `<2.0.0`, so the checked range need not be the shipped
+    one.
+    """
+    reqs = [
+        Requirement(r) for r in (distribution(DISTRIBUTION).requires or [])
+    ]
+    names = [canonicalize_name(r.name) for r in reqs if not r.marker]
+    duplicated = sorted(n for n, c in Counter(names).items() if c > 1)
+    assert not duplicated, (
+        f"{DISTRIBUTION} metadata declares these more than once: {duplicated}"
+    )
+
+
+@pytest.mark.parametrize("name", SIBLINGS)
 def test_installed_version_satisfies_the_artifact_metadata(name):
     """Catches a stale build, which is how it earned its keep during opensrm-p3bm.
 
     Editing pyproject.toml and re-locking without re-syncing leaves the
     installed dist-info carrying the old range. This test is what said so.
     """
-    declared = _declared_requirements()
+    declared = _sibling_requirements()
     assert name in declared, (
         f"{DISTRIBUTION} does not declare {name} at all — check that the wheel "
         f"metadata survived the build"
@@ -61,7 +133,7 @@ def test_installed_version_satisfies_the_artifact_metadata(name):
     assert version(name) in declared[name].specifier
 
 
-@pytest.mark.parametrize("name", sorted(EXPECTED_MAJORS))
+@pytest.mark.parametrize("name", SIBLINGS)
 def test_installed_sibling_is_the_major_this_code_was_written_against(name):
     """The assertion the container gate was missing.
 
