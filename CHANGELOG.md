@@ -6,6 +6,23 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [1.8.1](https://github.com/rsionnach/nthlayer-core/compare/v1.8.0...v1.8.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* declare the nthlayer-common range this repo is actually tested against ([4604c59](https://github.com/rsionnach/nthlayer-core/commit/4604c59213e37e70a3f68f0ef90bf6b865141366))
+* declare the nthlayer-common range this repo is actually tested against (opensrm-p3bm) ([18f68c8](https://github.com/rsionnach/nthlayer-core/commit/18f68c8e9e44842eead9b0de652c8514ad0dc2b5))
+
+
+### Documentation
+
+* add contributing guide (opensrm-tu04.4) ([6b43a51](https://github.com/rsionnach/nthlayer-core/commit/6b43a51aa827cf3292cb535f9119986fd0df0794))
+* record why the dependency guards are copied, not shared ([8debf06](https://github.com/rsionnach/nthlayer-core/commit/8debf06687a56e2a78d144863cab57b83e8a925e))
+* **tests:** attribute the silent-skip precedent to the repos it happened in ([2286d8e](https://github.com/rsionnach/nthlayer-core/commit/2286d8ed951cb7eab1f18dec699a658d9ea34843))
+* **tests:** attribute the silent-skip precedent to the repos it happened in ([e3f16eb](https://github.com/rsionnach/nthlayer-core/commit/e3f16ebc4ce1285709a9ac5d0bb7421a0f46bf63))
+* **tests:** name where the floor guard's red actually surfaces ([1487284](https://github.com/rsionnach/nthlayer-core/commit/148728472df0e0961caf2ce133fdeb4788dbcf5d))
+
 ## [1.8.0](https://github.com/rsionnach/nthlayer-core/compare/v1.7.0...v1.8.0) (2026-06-19)
 
 
