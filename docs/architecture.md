@@ -267,6 +267,18 @@ Core-specific methods (not on the VerdictStore ABC):
 
 ## Test suite
 
+- `test_dependency_declarations.py` (opensrm-p3bm) — reads
+  `pyproject.toml`. Discovers ecosystem siblings by name rather than from a
+  hand-kept list, and asserts: no duplicate declarations, the range admits
+  the installed sibling, the FLOOR equals it (the check that refutes
+  `>=1.5.0,<3.0.0`, which passes every other check while restoring the
+  original bug), an upper bound exists, and `BOUNDING_OPERATORS` matches
+  packaging's real behaviour across 12 specifiers.
+- `tests/smoke/test_resolved_dependencies.py` (opensrm-p3bm) — reads the
+  BUILT artifact's metadata rather than pyproject, so it is decisive in the
+  release container where dependencies resolve from PyPI. Asserts the
+  resolved MAJOR against an independently stated expectation; deriving that
+  from the declared range would make it agree with a wrong range.
 - `test_health.py` — async ASGI test: GET /health returns 200
   `{"status": "ok"}`.
 - `test_api.py` — full HTTP API: TestHealth, TestPostVerdict,
@@ -318,14 +330,45 @@ Core-specific methods (not on the VerdictStore ABC):
 
 ## Runtime dependencies
 
-- `nthlayer-common>=0.1.8` (editable local, path
-  `../nthlayer-common`) — shared utilities, verdict model.
-- `starlette>=0.40` — ASGI web framework.
-- `uvicorn>=0.30` — ASGI server.
-- `httpx>=0.27` — HTTP client (also used in tests via
-  `ASGITransport`).
+Versions are deliberately NOT restated here — `pyproject.toml` is
+authoritative, and this section carried `nthlayer-common>=0.1.8` until
+opensrm-p3bm, twenty minor releases out of date, directly above a line
+saying pyproject was authoritative. A copy that nothing checks drifts; the
+only fix that lasts is not keeping one. What each dependency is FOR does not
+drift, so that is what stays:
 
-Dev: `pytest>=8.2`, `pytest-asyncio>=0.23`
-(`asyncio_mode = "auto"`), `httpx>=0.27`.
+- `nthlayer-common` (editable local, path `../nthlayer-common`) — shared
+  utilities, verdict model.
+- `starlette` — ASGI web framework.
+- `uvicorn` — ASGI server.
+- `httpx` — HTTP client (also used in tests via `ASGITransport`).
 
-`pyproject.toml` is authoritative.
+Dev: `pytest` (`asyncio_mode = "auto"` via `pytest-asyncio`), `httpx`,
+`openapi-spec-validator`, `packaging`, `ruff`.
+
+### Why the nthlayer-common range needs guarding [opensrm-p3bm]
+
+`tool.uv.sources` points `nthlayer-common` at the sibling checkout, and a
+path source REPLACES registry resolution rather than being filtered by the
+version specifier. So `uv sync` and `uv pip install .` install whatever the
+sibling happens to be, regardless of what `project.dependencies` declares,
+and neither warns. Only `uv pip install --no-sources` exercises the
+published range.
+
+This repo therefore shipped `nthlayer-common>=1.5.0,<2.0.0` while every test
+ran against 2.1.2, for four minor releases. Measured consequences: the tested
+version was uninstallable from PyPI, and `pip install
+nthlayer-workers==2.0.0 nthlayer-core` succeeded while silently resolving
+core back to 1.0.0 — eight minor versions, being the only published core
+without a ceiling.
+
+CLAUDE.md hard rule 10 states the resulting invariant. The two guards that
+enforce it are listed under Test suite below.
+
+The same two guards are copied verbatim into `nthlayer-bench` and
+`nthlayer-override-adapter`, which had the identical defect. That duplication
+is deliberate: the smoke guard runs inside a release container holding only the
+wheel, `pytest` and `packaging`, so a shared helper living in any sibling repo
+is simply absent there. Sharing it would mean publishing a ninth distribution
+and making it a runtime dependency of three wheels — more surface than three
+copies cost. If anything is centralised, centralise the rule, not the code.

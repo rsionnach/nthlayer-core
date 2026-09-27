@@ -93,6 +93,20 @@ contract, or violate the "core is the only writer" invariant.
    case. Pinned by `TestRetentionGuards`. Do not relax these
    without an explicit spec change.
 
+10. **A declared dependency range must admit exactly the versions tested.**
+    Not the oldest that imports, not a future major. The floor equals the
+    installed sibling and there is always a ceiling — anything wider publishes
+    support for versions nothing here has run. Enforced by two guards that
+    read deliberately different things:
+    `tests/test_dependency_declarations.py` reads `pyproject.toml` and fails
+    locally; `tests/smoke/test_resolved_dependencies.py` reads the BUILT
+    artifact's metadata and is decisive in the release container, where
+    dependencies resolve from PyPI. Do not derive the expected major from the
+    declared range — that makes the test agree with a wrong range. Why the
+    range can drift unnoticed at all, and what it cost:
+    `docs/architecture.md` → "Why the nthlayer-common range needs guarding"
+    [opensrm-p3bm].
+
 ## Where to find detail
 
 - **OpenAPI 3.1 spec for the HTTP API**: `docs/api/openapi.json`
