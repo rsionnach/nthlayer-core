@@ -6,6 +6,14 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [1.8.2](https://github.com/rsionnach/nthlayer-core/compare/v1.8.1...v1.8.2) (2026-10-06)
+
+
+### Bug Fixes
+
+* **deps:** declare compatibility with nthlayer-common 3.0.0 ([bd8b870](https://github.com/rsionnach/nthlayer-core/commit/bd8b87002b97daed8de772ac2b20ed7e1a8eb17e))
+* **deps:** declare compatibility with nthlayer-common 3.0.0 ([0c804a8](https://github.com/rsionnach/nthlayer-core/commit/0c804a84699a6eb7fff5d0e71f4a24cb3975b259))
+
 ## [1.8.1](https://github.com/rsionnach/nthlayer-core/compare/v1.8.0...v1.8.1) (2026-09-27)
 
 
