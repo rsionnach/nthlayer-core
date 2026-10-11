@@ -6,6 +6,23 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [2.0.0](https://github.com/rsionnach/nthlayer-core/compare/v1.8.2...v2.0.0) (2026-10-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** GET /manifests no longer lists segments, stability or calibration under `slos`; read them from the new top-level `judgment_thresholds` list ([{type, bounds, measurement}]). Clients that evaluated these from `slos` (e.g. nthlayer-workers measure) must switch.
+
+### Features
+
+* **api:** move judgment error magnitudes out of slos into judgment_thresholds ([d3e487a](https://github.com/rsionnach/nthlayer-core/commit/d3e487ac22ca762a01e2bfc19d77633bab1bde90))
+* **api:** serialise judgment_thresholds on /manifests ([bc9d0a3](https://github.com/rsionnach/nthlayer-core/commit/bc9d0a3999a138972ccb21b2dddb40d3bccaef7a))
+
+
+### Documentation
+
+* **api:** declare judgment_thresholds in the Manifest schema ([718e935](https://github.com/rsionnach/nthlayer-core/commit/718e93532982dbd4f81fd0f5a4e7d378cddbf827))
+
 ## [1.8.2](https://github.com/rsionnach/nthlayer-core/compare/v1.8.1...v1.8.2) (2026-10-06)
 
 
