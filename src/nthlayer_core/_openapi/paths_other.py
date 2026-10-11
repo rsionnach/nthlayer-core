@@ -848,8 +848,11 @@ SCHEMAS: dict[str, dict] = {
         "description": (
             "An OpenSRM v2 service manifest serialised by "
             "``catalogue.manifest_to_dict``. The shape is flat — there is "
-            "no nested ``spec`` wrapper — and ``slos`` / ``dependencies`` "
-            "are always present (possibly empty)."
+            "no nested ``spec`` wrapper — and ``slos`` / ``dependencies`` / "
+            "``judgment_thresholds`` are always present (possibly empty). "
+            "``judgment_thresholds`` holds bounds on judgment error "
+            "magnitudes (OpenSRM decision 3c); they are not SLOs and never "
+            "appear under ``slos``."
         ),
         "required": [
             "name",
@@ -860,6 +863,7 @@ SCHEMAS: dict[str, dict] = {
             "source_format",
             "slos",
             "dependencies",
+            "judgment_thresholds",
         ],
         "properties": {
             "name": {"type": "string"},
@@ -892,6 +896,40 @@ SCHEMAS: dict[str, dict] = {
                 "items": {
                     "type": "object",
                     "additionalProperties": True,
+                },
+            },
+            "judgment_thresholds": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["type", "bounds", "measurement"],
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": [
+                                "segments",
+                                "stability",
+                                "calibration",
+                                "audit_backlog",
+                                "feedback_latency",
+                            ],
+                        },
+                        "bounds": {
+                            "type": "object",
+                            "description": (
+                                "Bound name to value, as declared: a number "
+                                "for Ratio bounds, a duration string such as "
+                                "``24h`` for Duration bounds."
+                            ),
+                            "additionalProperties": {
+                                "oneOf": [{"type": "number"}, {"type": "string"}]
+                            },
+                        },
+                        "measurement": {
+                            "type": "object",
+                            "additionalProperties": True,
+                        },
+                    },
                 },
             },
         },
