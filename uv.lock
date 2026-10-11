@@ -982,6 +982,7 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "httpx" },
+    { name = "jsonschema" },
     { name = "openapi-spec-validator" },
     { name = "packaging" },
     { name = "pytest" },
@@ -993,6 +994,7 @@ dev = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
+    { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.18" },
     { name = "nthlayer-common", editable = "../nthlayer-common" },
     { name = "openapi-spec-validator", marker = "extra == 'dev'", specifier = ">=0.7" },
     { name = "packaging", marker = "extra == 'dev'", specifier = ">=22" },

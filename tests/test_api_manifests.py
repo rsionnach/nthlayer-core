@@ -5,8 +5,11 @@ import time
 import pytest
 import yaml
 from httpx import ASGITransport, AsyncClient
+from jsonschema import Draft202012Validator
+from nthlayer_common.manifest import ManifestLoadError, load_manifest
 
 from nthlayer_core.catalogue import ManifestCatalogue
+from nthlayer_core.openapi_spec import OPENAPI
 from nthlayer_core.server import app, set_catalogue, set_store
 from nthlayer_core.store import Store
 
@@ -184,6 +187,87 @@ class TestJudgmentThresholds:
             "measurement": {"bins": 10, "window": "30d"},
         }]
         assert all(s.get("judgment_type") != "calibration" for s in body["slos"])
+
+
+    async def test_srm_v1_feedback_latency_target_lifts_to_p50_seconds(
+        self, client, catalogue, specs_dir
+    ):
+        _write_v1_spec(specs_dir, "fl-svc", svc_type="ai-gate",
+                       slos={"feedback_latency": {"target": 3600}})
+        catalogue.load()
+        body = (await client.get("/manifests/fl-svc")).json()
+        # Expected bound is nthlayer-common's srm/v1 lift
+        # (nthlayer_common.manifest.thresholds.srm_v1_threshold): a whole-second
+        # target becomes maximum_p50 "<n>s"; measurement is unset.
+        assert body["judgment_thresholds"] == [{
+            "type": "feedback_latency",
+            "bounds": {"maximum_p50": "3600s"},
+            "measurement": {},
+        }]
+
+
+class TestManifestSchemaConformance:
+    async def test_every_served_manifest_validates_against_openapi_manifest(
+        self, client, catalogue, specs_dir
+    ):
+        """The served body must satisfy the schema the spec publishes for it.
+
+        test_openapi.py only proves the dict equals the checked-in JSON, so a
+        wrong schema regenerated consistently passes there. This is the check
+        against real output, with all five threshold types in play.
+        """
+        _write_v2_spec(specs_dir, "credit-decision-agent", _V2_THRESHOLDS)
+        catalogue.load()
+        manifests = (await client.get("/manifests")).json()
+        served = next(m for m in manifests if m["name"] == "credit-decision-agent")
+        assert {t["type"] for t in served["judgment_thresholds"]} == {
+            "segments", "stability", "calibration", "audit_backlog", "feedback_latency"
+        }
+        schema = OPENAPI["components"]["schemas"]["Manifest"]
+        Draft202012Validator.check_schema(schema)
+        validator = Draft202012Validator(schema)
+        assert len(manifests) == 4
+        for m in manifests:
+            errors = [e.message for e in validator.iter_errors(m)]
+            assert not errors, (m["name"], errors)
+
+
+class TestRejectedManifests:
+    async def test_calibration_under_judgment_slo_is_omitted_not_fatal(
+        self, client, catalogue, specs_dir
+    ):
+        # Shape of opensrm/spec/v2/tests/invalid/n22-calibration-as-judgment-slo.yaml
+        # as an inline spec.judgment_slo item.
+        rejected = {
+            "apiVersion": "opensrm.nthlayer.io/v2",
+            "kind": "ServiceManifest",
+            "metadata": {"name": "bad-cal", "labels": {"tier": "critical"}},
+            "spec": {
+                "owner": {"group": "group:default/risk"},
+                "service": {"name": "bad-cal", "type": "ai-gate"},
+                "judgment_slo": [{
+                    "service": "bad-cal",
+                    "judgment_type": "calibration",
+                    "measurement": {"bins": 10, "window": "30d", "method": "brier_score"},
+                    "target": {"maximum_brier_score": 0.05},
+                }],
+            },
+        }
+        rejected_path = specs_dir / "bad-cal.yaml"
+        rejected_path.write_text(yaml.dump(rejected))
+        # Guard against an unrelated failure standing in for the real rejection.
+        with pytest.raises(ManifestLoadError) as excinfo:
+            load_manifest(rejected_path)
+        assert "judgment_threshold" in str(excinfo.value)
+
+        _write_v2_spec(specs_dir, "good-v2", _V2_THRESHOLDS)
+        catalogue.load()
+        resp = await client.get("/manifests")
+        assert resp.status_code == 200
+        names = {m["name"] for m in resp.json()}
+        assert "good-v2" in names
+        assert "bad-cal" not in names
+        assert names >= {"fraud-detect", "payment-api", "checkout-svc"}
 
 
 class TestGetManifest:
