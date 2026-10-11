@@ -167,6 +167,7 @@ class TestJudgmentThresholds:
 
     async def test_manifest_without_thresholds_has_empty_list(self, client):
         resp = await client.get("/manifests")
+        assert resp.json()
         for m in resp.json():
             assert m["judgment_thresholds"] == []
 
@@ -175,6 +176,8 @@ class TestJudgmentThresholds:
                        slos={"calibration": {"target": 0.05, "window": "30d"}})
         catalogue.load()
         body = (await client.get("/manifests/cal-svc")).json()
+        # Expected bound and bins: 10 come from nthlayer-common's srm/v1 lift
+        # (nthlayer_common.manifest.thresholds.srm_v1_threshold; docs/upgrading-4.0.md).
         assert body["judgment_thresholds"] == [{
             "type": "calibration",
             "bounds": {"maximum_expected_calibration_error": 0.05},

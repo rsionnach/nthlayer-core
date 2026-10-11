@@ -157,7 +157,8 @@ def manifest_to_dict(m: ReliabilityManifest) -> dict[str, Any]:
         result["slos"].append(slo_dict)
 
     # Judgment thresholds (nthlayer-common 4.0.0, opensrm-l33e): error-magnitude
-    # bounds live beside slos, not in them. Bounds are emitted as declared;
+    # bounds live beside slos, not in them. Bounds are emitted as parsed (srm/v1 calibration targets
+    # are translated to maximum_expected_calibration_error by nthlayer-common);
     # measurement carries only the fields that are set.
     result["judgment_thresholds"] = []
     for t in m.judgment_thresholds:

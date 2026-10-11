@@ -927,6 +927,13 @@ SCHEMAS: dict[str, dict] = {
                         },
                         "measurement": {
                             "type": "object",
+                            "description": (
+                                "Only the fields set for the threshold's type: "
+                                "calibration bins/window; stability probe "
+                                "{frozen_input_set, frequency}; segments "
+                                "segment_dimension/segment_values; empty for "
+                                "audit_backlog and feedback_latency."
+                            ),
                             "additionalProperties": True,
                         },
                     },
