@@ -6,6 +6,24 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [3.0.0](https://github.com/rsionnach/nthlayer-core/compare/v2.0.0...v3.0.0) (2026-10-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** the shape of each GET /manifests `judgment_thresholds` item changes. Old (2.x): {type, bounds, measurement} with `measurement` always present (empty for audit_backlog/feedback_latency) and holding segment_dimension, segment_values and probe. New (3.0): the flat v2 entry -- segments {type, metric, measurement: {window, source?, confidence_threshold?}, outcome_signal?, segment_dimension, segment_values, bounds}; stability {type, probe, bounds}; calibration {type, measurement: {bins, window}, bounds}; audit_backlog and feedback_latency {type, bounds} with no `measurement`. segment_dimension/segment_values/probe move from `measurement` to entry level; `metric` and `outcome_signal` are new. Manifests that nthlayer-common 5.0 rejects (e.g. a 4.x-era segments threshold with no `metric`) are skipped at load with a `catalogue_load_failed` log line and drop out of /manifests: check the log after upgrading. See nthlayer-common docs/upgrading-5.0.md.
+
+### Features
+
+* **api:** serve judgment_thresholds as v2 entries via nthlayer-common 5.0 ([8821511](https://github.com/rsionnach/nthlayer-core/commit/8821511ed1cd3559d5c62088dafdf75e209063d1))
+* **catalogue:** skip a manifest the threshold emitter rejects at load ([19f2a75](https://github.com/rsionnach/nthlayer-core/commit/19f2a7547284d49839505be41e5461ae98336a91))
+
+
+### Documentation
+
+* **api:** note the 3.0 judgment_thresholds item change and served window ([5e9ffdd](https://github.com/rsionnach/nthlayer-core/commit/5e9ffdd89d1e86e4c698b4d36e4d6c905600f00d))
+* **catalogue:** say what a new common threshold field still needs in core ([134eb2b](https://github.com/rsionnach/nthlayer-core/commit/134eb2bd34855ae0dd9b6dfd176f75b54f889a5c))
+
 ## [2.0.0](https://github.com/rsionnach/nthlayer-core/compare/v1.8.2...v2.0.0) (2026-10-11)
 
 
