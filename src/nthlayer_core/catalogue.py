@@ -21,6 +21,7 @@ from typing import Any
 from nthlayer_common.manifest import (
     ManifestLoadError,
     load_manifest,
+    threshold_to_v2_entry,
 )
 from nthlayer_common.manifest.models import ReliabilityManifest
 
@@ -156,30 +157,14 @@ def manifest_to_dict(m: ReliabilityManifest) -> dict[str, Any]:
             slo_dict["description"] = slo.description
         result["slos"].append(slo_dict)
 
-    # Judgment thresholds (nthlayer-common 4.0.0, opensrm-l33e): error-magnitude
-    # bounds live beside slos, not in them. Bounds are emitted as parsed (srm/v1 calibration targets
-    # are translated to maximum_expected_calibration_error by nthlayer-common);
-    # measurement carries only the fields that are set.
-    result["judgment_thresholds"] = []
-    for t in m.judgment_thresholds:
-        tm = t.measurement
-        measurement: dict[str, Any] = {}
-        if tm.bins is not None:
-            measurement["bins"] = tm.bins
-        if tm.window:
-            measurement["window"] = tm.window
-        if tm.probe:
-            measurement["probe"] = {
-                "frozen_input_set": tm.probe.frozen_input_set,
-                "frequency": tm.probe.frequency,
-            }
-        if tm.segment_dimension:
-            measurement["segment_dimension"] = tm.segment_dimension
-        if tm.segment_values:
-            measurement["segment_values"] = list(tm.segment_values)
-        result["judgment_thresholds"].append(
-            {"type": t.type, "bounds": dict(t.bounds), "measurement": measurement}
-        )
+    # Judgment thresholds: error-magnitude bounds live beside slos, not in them
+    # (opensrm-l33e). Each item is exactly the v2 spec.judgment_threshold entry,
+    # built by nthlayer-common's validated emitter rather than copied field by
+    # field here, so a field common adds reaches the API without a change in
+    # core (opensrm-7zpz). srm/v1 thresholds arrive already lifted to v2.
+    result["judgment_thresholds"] = [
+        threshold_to_v2_entry(t) for t in m.judgment_thresholds
+    ]
 
     # Dependencies
     result["dependencies"] = [

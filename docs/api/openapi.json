@@ -2615,48 +2615,426 @@
           },
           "judgment_thresholds": {
             "type": "array",
+            "description": "Each item is the OpenSRM v2 ``spec.judgment_threshold`` entry (OPENSRM-CORE-v2 \u00a75.5), emitted by nthlayer-common's ``threshold_to_v2_entry``. Items are closed: only the keys their ``type`` defines appear.",
             "items": {
-              "type": "object",
-              "required": [
-                "type",
-                "bounds",
-                "measurement"
-              ],
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "enum": [
-                    "segments",
-                    "stability",
-                    "calibration",
-                    "audit_backlog",
-                    "feedback_latency"
-                  ]
-                },
-                "bounds": {
-                  "type": "object",
-                  "description": "Bound name to value, as declared: a number for Ratio bounds, a duration string such as ``24h`` for Duration bounds.",
-                  "additionalProperties": {
-                    "oneOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string"
-                      }
-                    ]
-                  }
-                },
-                "measurement": {
-                  "type": "object",
-                  "description": "Only the fields set for the threshold's type: calibration bins/window; stability probe {frozen_input_set, frequency}; segments segment_dimension/segment_values; empty for audit_backlog and feedback_latency.",
-                  "additionalProperties": true
-                }
-              }
+              "$ref": "#/components/schemas/JudgmentThreshold"
             }
           }
         },
         "additionalProperties": true
+      },
+      "JudgmentThreshold": {
+        "description": "A bound on a judgment error magnitude (OpenSRM decision 3c): breached when the measured value exceeds a bound. Not an SLO -- no error budget, no complement. One shape per ``type``.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/JudgmentThresholdSegments"
+          },
+          {
+            "$ref": "#/components/schemas/JudgmentThresholdStability"
+          },
+          {
+            "$ref": "#/components/schemas/JudgmentThresholdCalibration"
+          },
+          {
+            "$ref": "#/components/schemas/JudgmentThresholdAuditBacklog"
+          },
+          {
+            "$ref": "#/components/schemas/JudgmentThresholdFeedbackLatency"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "segments": "#/components/schemas/JudgmentThresholdSegments",
+            "stability": "#/components/schemas/JudgmentThresholdStability",
+            "calibration": "#/components/schemas/JudgmentThresholdCalibration",
+            "audit_backlog": "#/components/schemas/JudgmentThresholdAuditBacklog",
+            "feedback_latency": "#/components/schemas/JudgmentThresholdFeedbackLatency"
+          }
+        }
+      },
+      "JudgmentThresholdSegments": {
+        "type": "object",
+        "description": "The rate ``metric`` names must not vary across ``segment_values`` of ``segment_dimension`` by more than the bound (OPENSRM-CORE-v2 \u00a75.5.1). ``measurement.window`` is the population window and is always present (``30d`` when the manifest omits it). Parameters per metric: reversal_rate ``measurement.source``; high_confidence_failure ``measurement.confidence_threshold``; outcomes ``outcome_signal``; escalation none.",
+        "required": [
+          "type",
+          "metric",
+          "measurement",
+          "segment_dimension",
+          "segment_values",
+          "bounds"
+        ],
+        "properties": {
+          "type": {
+            "const": "segments"
+          },
+          "metric": {
+            "enum": [
+              "reversal_rate",
+              "high_confidence_failure",
+              "outcomes",
+              "escalation"
+            ],
+            "description": "The judgment rate compared across segments. escalation is the escalation rate, not the human agreement rate."
+          },
+          "measurement": {
+            "type": "object",
+            "required": [
+              "window"
+            ],
+            "properties": {
+              "window": {
+                "allOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]+(ms|s|m|h|d|w)$",
+                    "description": "Duration: an integer followed by ms, s, m, h, d, or w."
+                  },
+                  {
+                    "not": {
+                      "pattern": "^0+(ms|s|m|h|d|w)$"
+                    },
+                    "description": "Never zero."
+                  }
+                ]
+              },
+              "source": {
+                "enum": [
+                  "lineage",
+                  "calibration_sample",
+                  "downstream_signal"
+                ]
+              },
+              "confidence_threshold": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Ratio value (0.0 - 1.0), not a percentage."
+              }
+            },
+            "additionalProperties": false
+          },
+          "outcome_signal": {
+            "type": "object",
+            "description": "outcomes only. ``window`` is how long after a decision to wait for its outcome, not the population window.",
+            "required": [
+              "source",
+              "window"
+            ],
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "window": {
+                "type": "string",
+                "pattern": "^[0-9]+(ms|s|m|h|d|w)$",
+                "description": "Duration: an integer followed by ms, s, m, h, d, or w."
+              }
+            },
+            "additionalProperties": false
+          },
+          "segment_dimension": {
+            "type": "string",
+            "minLength": 1
+          },
+          "segment_values": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          },
+          "bounds": {
+            "type": "object",
+            "required": [
+              "maximum_variance_from_overall"
+            ],
+            "properties": {
+              "maximum_variance_from_overall": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Ratio value (0.0 - 1.0), not a percentage."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "metric": {
+                  "const": "reversal_rate"
+                }
+              },
+              "required": [
+                "metric"
+              ]
+            },
+            "then": {
+              "properties": {
+                "measurement": {
+                  "required": [
+                    "source"
+                  ]
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "measurement": {
+                  "properties": {
+                    "source": {
+                      "not": {}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "metric": {
+                  "const": "high_confidence_failure"
+                }
+              },
+              "required": [
+                "metric"
+              ]
+            },
+            "then": {
+              "properties": {
+                "measurement": {
+                  "required": [
+                    "confidence_threshold"
+                  ]
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "measurement": {
+                  "properties": {
+                    "confidence_threshold": {
+                      "not": {}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "metric": {
+                  "const": "outcomes"
+                }
+              },
+              "required": [
+                "metric"
+              ]
+            },
+            "then": {
+              "required": [
+                "outcome_signal"
+              ]
+            },
+            "else": {
+              "properties": {
+                "outcome_signal": {
+                  "not": {}
+                }
+              }
+            }
+          }
+        ]
+      },
+      "JudgmentThresholdStability": {
+        "type": "object",
+        "description": "Drift on a frozen probe input set must stay within ``maximum_drift``.",
+        "required": [
+          "type",
+          "probe",
+          "bounds"
+        ],
+        "properties": {
+          "type": {
+            "const": "stability"
+          },
+          "probe": {
+            "type": "object",
+            "required": [
+              "frozen_input_set",
+              "frequency"
+            ],
+            "properties": {
+              "frozen_input_set": {
+                "type": "string"
+              },
+              "frequency": {
+                "enum": [
+                  "hourly",
+                  "daily",
+                  "weekly"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "bounds": {
+            "type": "object",
+            "required": [
+              "maximum_drift"
+            ],
+            "properties": {
+              "maximum_drift": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Ratio value (0.0 - 1.0), not a percentage."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "JudgmentThresholdCalibration": {
+        "type": "object",
+        "description": "Calibration error over ``measurement.bins`` confidence bins in ``measurement.window``. An srm/v1 calibration SLO is served lifted to this shape (bound ``maximum_expected_calibration_error``).",
+        "required": [
+          "type",
+          "measurement",
+          "bounds"
+        ],
+        "properties": {
+          "type": {
+            "const": "calibration"
+          },
+          "measurement": {
+            "type": "object",
+            "required": [
+              "bins",
+              "window"
+            ],
+            "properties": {
+              "bins": {
+                "type": "integer",
+                "minimum": 2
+              },
+              "window": {
+                "type": "string",
+                "pattern": "^[0-9]+(ms|s|m|h|d|w)$",
+                "description": "Duration: an integer followed by ms, s, m, h, d, or w."
+              }
+            },
+            "additionalProperties": false
+          },
+          "bounds": {
+            "type": "object",
+            "anyOf": [
+              {
+                "required": [
+                  "maximum_brier_score"
+                ]
+              },
+              {
+                "required": [
+                  "maximum_expected_calibration_error"
+                ]
+              }
+            ],
+            "properties": {
+              "maximum_brier_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "maximum_expected_calibration_error": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Ratio value (0.0 - 1.0), not a percentage."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "JudgmentThresholdAuditBacklog": {
+        "type": "object",
+        "description": "The oldest unaudited decision must be younger than ``maximum_age``.",
+        "required": [
+          "type",
+          "bounds"
+        ],
+        "properties": {
+          "type": {
+            "const": "audit_backlog"
+          },
+          "bounds": {
+            "type": "object",
+            "required": [
+              "maximum_age"
+            ],
+            "properties": {
+              "maximum_age": {
+                "type": "string",
+                "pattern": "^[0-9]+(ms|s|m|h|d|w)$",
+                "description": "Duration: an integer followed by ms, s, m, h, d, or w."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "JudgmentThresholdFeedbackLatency": {
+        "type": "object",
+        "description": "Time from decision to outcome must stay within the percentile bounds. An srm/v1 feedback_latency SLO is served lifted to this shape (target in its unit becomes ``maximum_p50``).",
+        "required": [
+          "type",
+          "bounds"
+        ],
+        "properties": {
+          "type": {
+            "const": "feedback_latency"
+          },
+          "bounds": {
+            "type": "object",
+            "anyOf": [
+              {
+                "required": [
+                  "maximum_p50"
+                ]
+              },
+              {
+                "required": [
+                  "maximum_p90"
+                ]
+              }
+            ],
+            "properties": {
+              "maximum_p50": {
+                "type": "string",
+                "pattern": "^[0-9]+(ms|s|m|h|d|w)$",
+                "description": "Duration: an integer followed by ms, s, m, h, d, or w."
+              },
+              "maximum_p90": {
+                "type": "string",
+                "pattern": "^[0-9]+(ms|s|m|h|d|w)$",
+                "description": "Duration: an integer followed by ms, s, m, h, d, or w."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       },
       "Suppression": {
         "type": "object",
