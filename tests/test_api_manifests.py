@@ -1,5 +1,6 @@
 """Tests for manifest catalogue API endpoints."""
 
+import copy
 import time
 
 import pytest
@@ -397,6 +398,80 @@ class TestManifestSchemaConformance:
         # Baseline: the real served manifest is clean, so any error below is
         # the substituted item's.
         assert not list(validator.iter_errors(served))
+        errors = list(validator.iter_errors({**served, "judgment_thresholds": [item]}))
+        assert errors
+        assert all(e.absolute_path[0] == "judgment_thresholds" for e in errors)
+
+
+def _served(entry):
+    """A deep copy of *entry* as served, for a test to damage in one place."""
+    return copy.deepcopy(_with_default_window(entry))
+
+
+def _drop(entry, *path):
+    *parents, key = path
+    target = entry
+    for p in parents:
+        target = target[p]
+    del target[key]
+    return entry
+
+
+def _put(entry, value, *path):
+    *parents, key = path
+    target = entry
+    for p in parents:
+        target = target[p]
+    target[key] = value
+    return entry
+
+
+_HCF, _REVERSAL, _OUTCOMES, _ESCALATION = (
+    _V2_THRESHOLDS[0], _V2_SEGMENTS_TWO_DIMENSIONS[0],
+    _V2_SEGMENTS_TWO_DIMENSIONS[1], _V2_AI_GATE_THRESHOLDS[1],
+)
+
+
+class TestSegmentsSchemaSingleDefects:
+    """Each case is a served segments entry, copied from a spec example, with
+    exactly one defect the spec's JudgmentThresholdSpec forbids (or, for the
+    always-present window, core's served narrowing of it). One defect per case
+    pins one constraint of the published JudgmentThresholdSegments schema."""
+
+    @pytest.mark.parametrize(
+        "entry", [_HCF, _REVERSAL, _OUTCOMES, _ESCALATION],
+        ids=["high_confidence_failure", "reversal_rate", "outcomes", "escalation"],
+    )
+    async def test_undamaged_base_validates(self, client, entry):
+        validator = _manifest_validator()
+        served = (await client.get("/manifests/payment-api")).json()
+        manifest = {**served, "judgment_thresholds": [_served(entry)]}
+        assert not list(validator.iter_errors(manifest))
+
+    @pytest.mark.parametrize(
+        "item",
+        [
+            pytest.param(_drop(_served(_ESCALATION), "metric"), id="no-metric"),
+            pytest.param(_drop(_served(_ESCALATION), "measurement", "window"),
+                         id="no-measurement-window"),
+            pytest.param(_drop(_served(_HCF), "measurement", "confidence_threshold"),
+                         id="high_confidence_failure-without-confidence_threshold"),
+            pytest.param(_drop(_served(_OUTCOMES), "outcome_signal"),
+                         id="outcomes-without-outcome_signal"),
+            pytest.param(_put(_served(_ESCALATION), "lineage", "measurement", "source"),
+                         id="source-on-escalation"),
+            pytest.param(_put(_served(_REVERSAL), 0.9, "measurement",
+                              "confidence_threshold"),
+                         id="confidence_threshold-on-reversal_rate"),
+            pytest.param(_put(_served(_ESCALATION), "0d", "measurement", "window"),
+                         id="zero-measurement-window"),
+            pytest.param(_put(_served(_ESCALATION), [], "segment_values"),
+                         id="empty-segment_values"),
+        ],
+    )
+    async def test_schema_refuses_single_defect(self, client, item):
+        validator = _manifest_validator()
+        served = (await client.get("/manifests/payment-api")).json()
         errors = list(validator.iter_errors({**served, "judgment_thresholds": [item]}))
         assert errors
         assert all(e.absolute_path[0] == "judgment_thresholds" for e in errors)

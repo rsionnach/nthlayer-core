@@ -85,8 +85,16 @@ def test_non_object_keys_are_not_closed_objects_in_the_schema():
                 assert prop.get("type") != "object", (type_name, key)
 
 
+def test_bounds_table_covers_every_type():
+    # Floor for the parametrisation below: an empty THRESHOLD_BOUNDS would
+    # collect zero cases and pass silently.
+    assert set(THRESHOLD_BOUNDS) == set(_item_components())
+    assert len(THRESHOLD_BOUNDS) == 5
+
+
 @pytest.mark.parametrize("type_name", sorted(THRESHOLD_BOUNDS))
 def test_bound_names_match(type_name):
+    assert THRESHOLD_BOUNDS[type_name]
     bounds = _item_components()[type_name]["properties"]["bounds"]
     assert bounds["additionalProperties"] is False
     assert set(bounds["properties"]) == set(THRESHOLD_BOUNDS[type_name])
