@@ -160,8 +160,11 @@ def manifest_to_dict(m: ReliabilityManifest) -> dict[str, Any]:
     # Judgment thresholds: error-magnitude bounds live beside slos, not in them
     # (opensrm-l33e). Each item is exactly the v2 spec.judgment_threshold entry,
     # built by nthlayer-common's validated emitter rather than copied field by
-    # field here, so a field common adds reaches the API without a change in
-    # core (opensrm-7zpz). srm/v1 thresholds arrive already lifted to v2.
+    # field here, so serialisation needs no change in core when common adds a
+    # field (opensrm-7zpz); the closed OpenAPI item schemas (paths_other.py)
+    # and docs/api/openapi.json DO need updating, and
+    # test_every_served_manifest_validates_against_openapi_manifest fails
+    # until they are. srm/v1 thresholds arrive already lifted to v2.
     result["judgment_thresholds"] = [
         threshold_to_v2_entry(t) for t in m.judgment_thresholds
     ]
