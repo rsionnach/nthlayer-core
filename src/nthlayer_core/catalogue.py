@@ -21,6 +21,7 @@ from typing import Any
 from nthlayer_common.manifest import (
     ManifestLoadError,
     load_manifest,
+    threshold_to_v2_entry,
 )
 from nthlayer_common.manifest.models import ReliabilityManifest
 
@@ -115,6 +116,10 @@ class ManifestCatalogue:
         try:
             mtime = yaml_file.stat().st_mtime  # capture before parse to avoid TOCTOU
             manifest = load_manifest(yaml_file, suppress_deprecation_warning=True)
+            # Serialise once before caching: a manifest the emitter refuses
+            # (ValueError) is skipped here like any rejected manifest, rather
+            # than making every GET /manifests a 500.
+            manifest_to_dict(manifest)
             self._manifests[manifest.name] = manifest
             self._mtimes[str(yaml_file)] = mtime
             return manifest.name
@@ -156,30 +161,17 @@ def manifest_to_dict(m: ReliabilityManifest) -> dict[str, Any]:
             slo_dict["description"] = slo.description
         result["slos"].append(slo_dict)
 
-    # Judgment thresholds (nthlayer-common 4.0.0, opensrm-l33e): error-magnitude
-    # bounds live beside slos, not in them. Bounds are emitted as parsed (srm/v1 calibration targets
-    # are translated to maximum_expected_calibration_error by nthlayer-common);
-    # measurement carries only the fields that are set.
-    result["judgment_thresholds"] = []
-    for t in m.judgment_thresholds:
-        tm = t.measurement
-        measurement: dict[str, Any] = {}
-        if tm.bins is not None:
-            measurement["bins"] = tm.bins
-        if tm.window:
-            measurement["window"] = tm.window
-        if tm.probe:
-            measurement["probe"] = {
-                "frozen_input_set": tm.probe.frozen_input_set,
-                "frequency": tm.probe.frequency,
-            }
-        if tm.segment_dimension:
-            measurement["segment_dimension"] = tm.segment_dimension
-        if tm.segment_values:
-            measurement["segment_values"] = list(tm.segment_values)
-        result["judgment_thresholds"].append(
-            {"type": t.type, "bounds": dict(t.bounds), "measurement": measurement}
-        )
+    # Judgment thresholds: error-magnitude bounds live beside slos, not in them
+    # (opensrm-l33e). Each item is exactly the v2 spec.judgment_threshold entry,
+    # built by nthlayer-common's validated emitter rather than copied field by
+    # field here, so serialisation needs no change in core when common adds a
+    # field (opensrm-7zpz); the closed OpenAPI item schemas (paths_other.py)
+    # and docs/api/openapi.json DO need updating, and
+    # test_every_served_manifest_validates_against_openapi_manifest fails
+    # until they are. srm/v1 thresholds arrive already lifted to v2.
+    result["judgment_thresholds"] = [
+        threshold_to_v2_entry(t) for t in m.judgment_thresholds
+    ]
 
     # Dependencies
     result["dependencies"] = [

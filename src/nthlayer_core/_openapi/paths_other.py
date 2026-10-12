@@ -775,6 +775,247 @@ PATHS: dict[str, dict] = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# Judgment threshold items (opensrm-7zpz). Each /manifests judgment_thresholds
+# item is the v2 spec.judgment_threshold entry nthlayer-common's
+# threshold_to_v2_entry emits. The shapes mirror opensrm spec/v2/schema.json
+# JudgmentThresholdSpec per type -- closed objects, closed bounds, the segments
+# metric enum and its per-metric parameters -- narrowed only where the served
+# entry is always more complete than a declared one: a segments item always
+# carries measurement.window (the 30d default stated, OPENSRM-CORE-v2 §5.5.1)
+# -- a server-side narrowing of the spec, which leaves window optional.
+# Duration and Ratio copy the spec's definitions of the same names.
+# ---------------------------------------------------------------------------
+
+_DURATION: dict = {
+    "type": "string",
+    "pattern": "^[0-9]+(ms|s|m|h|d|w)$",
+    "description": "Duration: an integer followed by ms, s, m, h, d, or w.",
+}
+_RATIO: dict = {
+    "type": "number",
+    "minimum": 0,
+    "maximum": 1,
+    "description": "Ratio value (0.0 - 1.0), not a percentage.",
+}
+
+
+def _threshold_item(type_name: str, description: str, required: list[str],
+                    properties: dict, **extra: object) -> dict:
+    """A closed threshold item whose ``type`` is *type_name*."""
+    return {
+        "type": "object",
+        "description": description,
+        "required": ["type", *required, "bounds"],
+        "properties": {"type": {"const": type_name}, **properties},
+        "additionalProperties": False,
+        **extra,
+    }
+
+
+# Matches no value: a key so marked must be absent. The spec's spelling.
+_ABSENT: dict = {"not": {}}
+
+
+def _requires_parameter_iff(metric: str, then: dict, otherwise: dict) -> dict:
+    """*then* applies when ``metric`` is *metric*, *otherwise* for every other."""
+    return {
+        "if": {"properties": {"metric": {"const": metric}}, "required": ["metric"]},
+        "then": then,
+        "else": otherwise,
+    }
+
+
+_SEGMENTS_THRESHOLD = _threshold_item(
+    "segments",
+    (
+        "The rate ``metric`` names must not vary across ``segment_values`` "
+        "of ``segment_dimension`` by more than the bound (OPENSRM-CORE-v2 "
+        "§5.5.1). ``measurement.window`` is the population window and is "
+        "always present (``30d`` when the manifest omits it). Parameters "
+        "per metric: reversal_rate ``measurement.source``; "
+        "high_confidence_failure ``measurement.confidence_threshold``; "
+        "outcomes ``outcome_signal``; escalation none."
+    ),
+    ["metric", "measurement", "segment_dimension", "segment_values"],
+    {
+        "metric": {
+            "enum": [
+                "reversal_rate",
+                "high_confidence_failure",
+                "outcomes",
+                "escalation",
+            ],
+            "description": (
+                "The judgment rate compared across segments. escalation is "
+                "the escalation rate, not the human agreement rate."
+            ),
+        },
+        "measurement": {
+            "type": "object",
+            "required": ["window"],
+            "properties": {
+                "window": {
+                    "description": (
+                        "Population window. Always present when served: the "
+                        "manifest's value or the 30d default "
+                        "(OPENSRM-CORE-v2 §5.5.1)."
+                    ),
+                    "allOf": [
+                        _DURATION,
+                        {
+                            "not": {"pattern": "^0+(ms|s|m|h|d|w)$"},
+                            "description": "Never zero.",
+                        },
+                    ],
+                },
+                "source": {
+                    "enum": ["lineage", "calibration_sample", "downstream_signal"],
+                },
+                "confidence_threshold": _RATIO,
+            },
+            "additionalProperties": False,
+        },
+        "outcome_signal": {
+            "type": "object",
+            "description": (
+                "outcomes only. ``window`` is how long after a decision to "
+                "wait for its outcome, not the population window."
+            ),
+            "required": ["source", "window"],
+            "properties": {"source": {"type": "string"}, "window": _DURATION},
+            "additionalProperties": False,
+        },
+        "segment_dimension": {"type": "string", "minLength": 1},
+        "segment_values": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "minItems": 1,
+        },
+        "bounds": {
+            "type": "object",
+            "required": ["maximum_variance_from_overall"],
+            "properties": {"maximum_variance_from_overall": _RATIO},
+            "additionalProperties": False,
+        },
+    },
+    allOf=[
+        _requires_parameter_iff(
+            "reversal_rate",
+            {"properties": {"measurement": {"required": ["source"]}}},
+            {"properties": {"measurement": {"properties": {"source": _ABSENT}}}},
+        ),
+        _requires_parameter_iff(
+            "high_confidence_failure",
+            {"properties": {"measurement": {"required": ["confidence_threshold"]}}},
+            {"properties": {"measurement": {"properties": {"confidence_threshold": _ABSENT}}}},
+        ),
+        _requires_parameter_iff(
+            "outcomes",
+            {"required": ["outcome_signal"]},
+            {"properties": {"outcome_signal": _ABSENT}},
+        ),
+    ],
+)
+
+_STABILITY_THRESHOLD = _threshold_item(
+    "stability",
+    "Drift on a frozen probe input set must stay within ``maximum_drift``.",
+    ["probe"],
+    {
+        "probe": {
+            "type": "object",
+            "required": ["frozen_input_set", "frequency"],
+            "properties": {
+                "frozen_input_set": {"type": "string"},
+                "frequency": {"enum": ["hourly", "daily", "weekly"]},
+            },
+            "additionalProperties": False,
+        },
+        "bounds": {
+            "type": "object",
+            "required": ["maximum_drift"],
+            "properties": {"maximum_drift": _RATIO},
+            "additionalProperties": False,
+        },
+    },
+)
+
+_CALIBRATION_THRESHOLD = _threshold_item(
+    "calibration",
+    (
+        "Calibration error over ``measurement.bins`` confidence bins in "
+        "``measurement.window``. An srm/v1 calibration SLO is served lifted "
+        "to this shape (bound ``maximum_expected_calibration_error``)."
+    ),
+    ["measurement"],
+    {
+        "measurement": {
+            "type": "object",
+            "required": ["bins", "window"],
+            "properties": {
+                "bins": {"type": "integer", "minimum": 2},
+                "window": _DURATION,
+            },
+            "additionalProperties": False,
+        },
+        "bounds": {
+            "type": "object",
+            "anyOf": [
+                {"required": ["maximum_brier_score"]},
+                {"required": ["maximum_expected_calibration_error"]},
+            ],
+            "properties": {
+                "maximum_brier_score": {"type": "number", "minimum": 0, "maximum": 1},
+                "maximum_expected_calibration_error": _RATIO,
+            },
+            "additionalProperties": False,
+        },
+    },
+)
+
+_AUDIT_BACKLOG_THRESHOLD = _threshold_item(
+    "audit_backlog",
+    "The oldest unaudited decision must be younger than ``maximum_age``.",
+    [],
+    {
+        "bounds": {
+            "type": "object",
+            "required": ["maximum_age"],
+            "properties": {"maximum_age": _DURATION},
+            "additionalProperties": False,
+        },
+    },
+)
+
+_FEEDBACK_LATENCY_THRESHOLD = _threshold_item(
+    "feedback_latency",
+    (
+        "Time from decision to outcome must stay within the percentile "
+        "bounds. An srm/v1 feedback_latency SLO is served lifted to this "
+        "shape (target in its unit becomes ``maximum_p50``)."
+    ),
+    [],
+    {
+        "bounds": {
+            "type": "object",
+            "anyOf": [{"required": ["maximum_p50"]}, {"required": ["maximum_p90"]}],
+            "properties": {"maximum_p50": _DURATION, "maximum_p90": _DURATION},
+            "additionalProperties": False,
+        },
+    },
+)
+
+# Component name per threshold type, shared by the oneOf and its discriminator.
+_THRESHOLD_COMPONENTS = {
+    "segments": "JudgmentThresholdSegments",
+    "stability": "JudgmentThresholdStability",
+    "calibration": "JudgmentThresholdCalibration",
+    "audit_backlog": "JudgmentThresholdAuditBacklog",
+    "feedback_latency": "JudgmentThresholdFeedbackLatency",
+}
+
+
 SCHEMAS: dict[str, dict] = {
     "ChangeFreeze": {
         "type": "object",
@@ -900,48 +1141,46 @@ SCHEMAS: dict[str, dict] = {
             },
             "judgment_thresholds": {
                 "type": "array",
-                "items": {
-                    "type": "object",
-                    "required": ["type", "bounds", "measurement"],
-                    "properties": {
-                        "type": {
-                            "type": "string",
-                            "enum": [
-                                "segments",
-                                "stability",
-                                "calibration",
-                                "audit_backlog",
-                                "feedback_latency",
-                            ],
-                        },
-                        "bounds": {
-                            "type": "object",
-                            "description": (
-                                "Bound name to value, as declared: a number "
-                                "for Ratio bounds, a duration string such as "
-                                "``24h`` for Duration bounds."
-                            ),
-                            "additionalProperties": {
-                                "oneOf": [{"type": "number"}, {"type": "string"}]
-                            },
-                        },
-                        "measurement": {
-                            "type": "object",
-                            "description": (
-                                "Only the fields set for the threshold's type: "
-                                "calibration bins/window; stability probe "
-                                "{frozen_input_set, frequency}; segments "
-                                "segment_dimension/segment_values; empty for "
-                                "audit_backlog and feedback_latency."
-                            ),
-                            "additionalProperties": True,
-                        },
-                    },
-                },
+                "description": (
+                    "Each item is the OpenSRM v2 ``spec.judgment_threshold`` "
+                    "entry (OPENSRM-CORE-v2 §5.5), emitted by nthlayer-common's "
+                    "``threshold_to_v2_entry``. Items are closed: only the "
+                    "keys their ``type`` defines appear. Changed in 3.0 (was "
+                    "{type, bounds, measurement}): segment_dimension, "
+                    "segment_values and probe are now entry-level, not under "
+                    "measurement; segments gain required ``metric`` and "
+                    "optional ``outcome_signal``; audit_backlog and "
+                    "feedback_latency have no ``measurement`` key (2.x sent "
+                    "{}). Branch on ``type``."
+                ),
+                "items": {"$ref": "#/components/schemas/JudgmentThreshold"},
             },
         },
         "additionalProperties": True,
     },
+    "JudgmentThreshold": {
+        "description": (
+            "A bound on a judgment error magnitude (OpenSRM decision 3c): "
+            "breached when the measured value exceeds a bound. Not an SLO -- "
+            "no error budget, no complement. One shape per ``type``."
+        ),
+        "oneOf": [
+            {"$ref": f"#/components/schemas/{name}"}
+            for name in _THRESHOLD_COMPONENTS.values()
+        ],
+        "discriminator": {
+            "propertyName": "type",
+            "mapping": {
+                type_name: f"#/components/schemas/{name}"
+                for type_name, name in _THRESHOLD_COMPONENTS.items()
+            },
+        },
+    },
+    "JudgmentThresholdSegments": _SEGMENTS_THRESHOLD,
+    "JudgmentThresholdStability": _STABILITY_THRESHOLD,
+    "JudgmentThresholdCalibration": _CALIBRATION_THRESHOLD,
+    "JudgmentThresholdAuditBacklog": _AUDIT_BACKLOG_THRESHOLD,
+    "JudgmentThresholdFeedbackLatency": _FEEDBACK_LATENCY_THRESHOLD,
     "Suppression": {
         "type": "object",
         "description": (
