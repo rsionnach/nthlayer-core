@@ -2615,7 +2615,7 @@
           },
           "judgment_thresholds": {
             "type": "array",
-            "description": "Each item is the OpenSRM v2 ``spec.judgment_threshold`` entry (OPENSRM-CORE-v2 \u00a75.5), emitted by nthlayer-common's ``threshold_to_v2_entry``. Items are closed: only the keys their ``type`` defines appear.",
+            "description": "Each item is the OpenSRM v2 ``spec.judgment_threshold`` entry (OPENSRM-CORE-v2 \u00a75.5), emitted by nthlayer-common's ``threshold_to_v2_entry``. Items are closed: only the keys their ``type`` defines appear. Changed in 3.0 (was {type, bounds, measurement}): segment_dimension, segment_values and probe are now entry-level, not under measurement; segments gain required ``metric`` and optional ``outcome_signal``; audit_backlog and feedback_latency have no ``measurement`` key (2.x sent {}). Branch on ``type``.",
             "items": {
               "$ref": "#/components/schemas/JudgmentThreshold"
             }
@@ -2684,6 +2684,7 @@
             ],
             "properties": {
               "window": {
+                "description": "Population window. Always present when served: the manifest's value or the 30d default (OPENSRM-CORE-v2 \u00a75.5.1).",
                 "allOf": [
                   {
                     "type": "string",

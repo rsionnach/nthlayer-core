@@ -782,7 +782,8 @@ PATHS: dict[str, dict] = {
 # JudgmentThresholdSpec per type -- closed objects, closed bounds, the segments
 # metric enum and its per-metric parameters -- narrowed only where the served
 # entry is always more complete than a declared one: a segments item always
-# carries measurement.window (the 30d default stated, OPENSRM-CORE-v2 §5.5.1).
+# carries measurement.window (the 30d default stated, OPENSRM-CORE-v2 §5.5.1)
+# -- a server-side narrowing of the spec, which leaves window optional.
 # Duration and Ratio copy the spec's definitions of the same names.
 # ---------------------------------------------------------------------------
 
@@ -855,6 +856,11 @@ _SEGMENTS_THRESHOLD = _threshold_item(
             "required": ["window"],
             "properties": {
                 "window": {
+                    "description": (
+                        "Population window. Always present when served: the "
+                        "manifest's value or the 30d default "
+                        "(OPENSRM-CORE-v2 §5.5.1)."
+                    ),
                     "allOf": [
                         _DURATION,
                         {
@@ -1139,7 +1145,13 @@ SCHEMAS: dict[str, dict] = {
                     "Each item is the OpenSRM v2 ``spec.judgment_threshold`` "
                     "entry (OPENSRM-CORE-v2 §5.5), emitted by nthlayer-common's "
                     "``threshold_to_v2_entry``. Items are closed: only the "
-                    "keys their ``type`` defines appear."
+                    "keys their ``type`` defines appear. Changed in 3.0 (was "
+                    "{type, bounds, measurement}): segment_dimension, "
+                    "segment_values and probe are now entry-level, not under "
+                    "measurement; segments gain required ``metric`` and "
+                    "optional ``outcome_signal``; audit_backlog and "
+                    "feedback_latency have no ``measurement`` key (2.x sent "
+                    "{}). Branch on ``type``."
                 ),
                 "items": {"$ref": "#/components/schemas/JudgmentThreshold"},
             },
