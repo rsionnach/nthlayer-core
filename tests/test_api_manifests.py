@@ -440,6 +440,30 @@ class TestRejectedManifests:
         assert names >= {"fraud-detect", "payment-api", "checkout-svc"}
 
 
+    async def test_4x_segments_without_metric_is_omitted_not_fatal(
+        self, client, catalogue, specs_dir
+    ):
+        # The 4.x-era segments shape: no `metric`, which OPENSRM-CORE-v2
+        # §5.5.1 now requires (spec/v2/schema.json JudgmentThresholdSpec
+        # segments `required`). Its siblings must still load and be served.
+        stale = [{"type": "segments", "segment_dimension": "customer_tier",
+                  "segment_values": ["enterprise", "smb", "consumer"],
+                  "bounds": {"maximum_variance_from_overall": 0.05}}]
+        _write_v2_spec(specs_dir, "stale-segments", stale)
+        # Guard against an unrelated failure standing in for the real rejection.
+        with pytest.raises(ManifestLoadError) as excinfo:
+            load_manifest(specs_dir / "stale-segments.yaml")
+        assert "metric" in str(excinfo.value)
+
+        _write_v2_spec(specs_dir, "good-v2", _V2_THRESHOLDS)
+        catalogue.load()
+        resp = await client.get("/manifests")
+        assert resp.status_code == 200
+        names = {m["name"] for m in resp.json()}
+        assert "stale-segments" not in names
+        assert names == {"fraud-detect", "payment-api", "checkout-svc", "good-v2"}
+        assert (await client.get("/manifests/stale-segments")).status_code == 404
+
 class TestGetManifest:
     async def test_get_existing(self, client):
         resp = await client.get("/manifests/payment-api")
