@@ -116,6 +116,10 @@ class ManifestCatalogue:
         try:
             mtime = yaml_file.stat().st_mtime  # capture before parse to avoid TOCTOU
             manifest = load_manifest(yaml_file, suppress_deprecation_warning=True)
+            # Serialise once before caching: a manifest the emitter refuses
+            # (ValueError) is skipped here like any rejected manifest, rather
+            # than making every GET /manifests a 500.
+            manifest_to_dict(manifest)
             self._manifests[manifest.name] = manifest
             self._mtimes[str(yaml_file)] = mtime
             return manifest.name

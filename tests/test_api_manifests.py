@@ -464,6 +464,40 @@ class TestRejectedManifests:
         assert names == {"fraud-detect", "payment-api", "checkout-svc", "good-v2"}
         assert (await client.get("/manifests/stale-segments")).status_code == 404
 
+    async def test_manifest_the_emitter_rejects_is_omitted_not_fatal(
+        self, client, catalogue, specs_dir, monkeypatch
+    ):
+        """A manifest that loads but cannot be serialised is skipped at load.
+
+        Serialising at request time would turn one such manifest into a 500
+        for GET /manifests as a whole. threshold_to_v2_entry raises ValueError
+        for a threshold the parser could never produce; no real manifest
+        reaches that today, so the emitter is made to raise for one service.
+        """
+        import nthlayer_core.catalogue as catalogue_module
+
+        real_emitter = catalogue_module.threshold_to_v2_entry
+
+        def emitter(threshold):
+            if threshold.bounds.get("maximum_drift") == 0.02:  # stability entry
+                raise ValueError("emitter refused")
+            return real_emitter(threshold)
+
+        monkeypatch.setattr(catalogue_module, "threshold_to_v2_entry", emitter)
+        _write_v2_spec(specs_dir, "unserialisable", _V2_THRESHOLDS)
+        _write_v2_spec(specs_dir, "pricing-agent", _V2_SEGMENTS_TWO_DIMENSIONS)
+        loaded = catalogue.load()
+        assert "unserialisable" not in loaded
+        assert "pricing-agent" in loaded
+
+        resp = await client.get("/manifests")
+        assert resp.status_code == 200
+        assert {m["name"] for m in resp.json()} == {
+            "fraud-detect", "payment-api", "checkout-svc", "pricing-agent"
+        }
+        assert (await client.get("/manifests/unserialisable")).status_code == 404
+
+
 class TestGetManifest:
     async def test_get_existing(self, client):
         resp = await client.get("/manifests/payment-api")
