@@ -96,9 +96,14 @@ class TestGetManifests:
 
 
 # Threshold fixtures are inlined from the spec's own examples (core CI does not
-# check out opensrm), copied entry for entry. Each list names its source file
-# under opensrm/spec/v2/examples/; the `segments` entries carry `metric` and its
-# parameter as OPENSRM-CORE-v2 §5.5.1 requires (opensrm-7zpz).
+# check out opensrm), copied entry for entry from opensrm main @ 859424a (the
+# opensrm-7zpz merge); no entry is edited from its source. Each list names its
+# source file under opensrm/spec/v2/examples/. Against core 2.x's copy, the
+# _V2_THRESHOLDS segments entry changed with its source: it gained
+# `metric: high_confidence_failure` and `measurement.confidence_threshold`,
+# as OPENSRM-CORE-v2 §5.5.1 now requires; the other two lists are new.
+# To refresh: diff each entry against the named opensrm file at the opensrm
+# commit core targets; edit the inline copy, never load from the sibling.
 
 # judgment-thresholds/all-five-types.yaml (decision 3c, opensrm-l33e).
 _V2_THRESHOLDS = [
@@ -193,8 +198,10 @@ class TestJudgmentThresholds:
     @pytest.mark.parametrize(
         ("name", "declared"),
         [
-            ("pricing-agent", _V2_SEGMENTS_TWO_DIMENSIONS),
-            ("refund-approver", _V2_AI_GATE_THRESHOLDS),
+            pytest.param("pricing-agent", _V2_SEGMENTS_TWO_DIMENSIONS,
+                         id="reversal_rate+outcomes"),
+            pytest.param("refund-approver", _V2_AI_GATE_THRESHOLDS,
+                         id="reversal_rate+escalation"),
         ],
     )
     async def test_segments_metric_and_parameter_served(
@@ -318,6 +325,7 @@ class TestManifestSchemaConformance:
                        slos={"feedback_latency": {"target": 3600}})
         catalogue.load()
         manifests = (await client.get("/manifests")).json()
+        # 3 from the `catalogue` fixture + the 5 written above.
         assert len(manifests) == 8
         served = [t for m in manifests for t in m["judgment_thresholds"]]
         assert {t["type"] for t in served} == {
@@ -331,7 +339,7 @@ class TestManifestSchemaConformance:
             errors = [e.message for e in validator.iter_errors(m)]
             assert not errors, (m["name"], errors)
 
-    # Item shapes the 5.0 contract no longer serves. Each must be refused by
+    # Item shapes core 3.0 (common 5.0) no longer serves. Each must be refused by
     # the published schema, or a client validating against it would accept a
     # stale or misspelled threshold.
     @pytest.mark.parametrize(
