@@ -21,8 +21,8 @@ dependencies = [
     # serialises each threshold via threshold_to_v2_entry, common's validated
     # emitter of the v2 spec.judgment_threshold entry, never a hand-copy.
     # WHY 5.2.0 (opensrm-g35i): the version this repo is now built and tested
-    # against (rule 10: the floor is the installed sibling). Nothing here uses
-    # an API new in 5.1/5.2.
+    # against (rule 10: the floor is the installed sibling). Bump it on
+    # every nthlayer-common minor release: the floor guard fails until you do.
     "nthlayer-common>=5.2.0,<6.0.0",
     "starlette>=0.40",
     "uvicorn>=0.30",
