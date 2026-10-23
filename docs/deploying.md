@@ -27,12 +27,16 @@ uv tool install nthlayer-core
 Verify the install:
 
 ```bash
-nthlayer --version
+nthlayer-core --version
 ```
 
 ```
-nthlayer 1.7.0
+nthlayer-core X.Y.Z
 ```
+
+The console script was `nthlayer` before 4.0.0; it was renamed to `nthlayer-core` because nthlayer-generate owns `nthlayer` (opensrm-dww5).
+
+**Upgrading from 3.x:** if nthlayer-generate is installed in the same environment, reinstall it after upgrading core, because the 3.x core package owned the `nthlayer` script file and the upgrade removes it: `pip install --force-reinstall --no-deps nthlayer-generate` (or `uv pip install --reinstall-package nthlayer-generate nthlayer-generate`).
 
 ### 3. Choose a manifests directory
 
@@ -67,7 +71,7 @@ This tutorial uses Option A from here on (Option B users substitute
 From inside the `opensrm/` directory:
 
 ```bash
-NTHLAYER_MANIFESTS_DIR=./examples nthlayer serve
+NTHLAYER_MANIFESTS_DIR=./examples nthlayer-core serve
 ```
 
 You should see the server come up on port 8000:
@@ -148,8 +152,8 @@ API surface via the OpenAPI spec at `GET /openapi.json`.
 ### CLI
 
 ```
-nthlayer serve [--host HOST] [--port PORT]   # defaults 0.0.0.0:8000
-nthlayer --version                            # also -V
+nthlayer-core serve [--host HOST] [--port PORT]   # defaults 0.0.0.0:8000
+nthlayer-core --version                            # also -V
 ```
 
 The CLI surface is intentionally minimal: one subcommand (`serve`) with
@@ -221,10 +225,10 @@ problem. Table summarises symptoms; paragraphs below give the diagnosis.
 
 | # | Symptom | Cause | Fix |
 |---|---|---|---|
-| 1 | `nthlayer: command not found` after install | uv tool-shim dir not on `PATH` | `uv tool update-shell` (or add `~/.local/bin` to `PATH`) |
-| 2 | `OSError: [Errno 48/98] Address already in use` | Port 8000 taken | `nthlayer serve --port 8001` or kill the prior process |
+| 1 | `nthlayer-core: command not found` after install | uv tool-shim dir not on `PATH` | `uv tool update-shell` (or add `~/.local/bin` to `PATH`) |
+| 2 | `OSError: [Errno 48/98] Address already in use` | Port 8000 taken | `nthlayer-core serve --port 8001` or kill the prior process |
 | 3 | `sqlite3.OperationalError: unable to open database file` | Cwd not writable, or `NTHLAYER_STORE_PATH` points at a missing dir, **or points at a directory itself instead of a file** | `NTHLAYER_STORE_PATH=/var/lib/nthlayer/store.db` (ensure dir exists and is writable; the path is the file, not the directory) or chdir to a writable dir |
-| 4 | `sqlite3.OperationalError: database is locked` (persistent, not transient) | Two `nthlayer serve` processes on the same DB | Kill the duplicate; one writer per store. WAL + 5s busy-timeout handles transient contention, not two writers |
+| 4 | `sqlite3.OperationalError: database is locked` (persistent, not transient) | Two `nthlayer-core serve` processes on the same DB | Kill the duplicate; one writer per store. WAL + 5s busy-timeout handles transient contention, not two writers |
 | 5 | `GET /manifests` returns `[]` despite `NTHLAYER_MANIFESTS_DIR` set | Relative path resolved from wrong cwd, or dir is empty/missing | Use an absolute path; check server logs for the load summary |
 | 6 | One manifest missing from `GET /manifests` even though the file exists | Invalid YAML or schema mismatch; catalogue skips bad manifests rather than crashing the server | Check server logs for the parse error; fix the YAML; `POST /manifests/-/reload` |
 | 7 | Local `curl` works, remote `curl` times out | Cloud firewall / security group / host firewall blocks 8000 | Open the port, or bind `--host 127.0.0.1` and SSH-tunnel |
@@ -234,7 +238,7 @@ problem. Table summarises symptoms; paragraphs below give the diagnosis.
 `uv tool install` writes a shim to `~/.local/bin` (Linux/macOS) and
 prints a warning if that directory is not on `PATH`. If you missed the
 warning, `uv tool update-shell` edits your shell rc to add it; opening
-a new terminal then resolves `nthlayer`. Verify with `which nthlayer`.
+a new terminal then resolves `nthlayer-core`. Verify with `which nthlayer-core`.
 On macOS with zsh, a stale `~/.zshrc` cache or a non-login shell can
 also hide the shim — `exec zsh -l` forces a re-read.
 
@@ -244,7 +248,7 @@ The exact error is `OSError: [Errno 48] Address already in use` on
 macOS and `[Errno 98]` on Linux. Confirm with `lsof -i :8000` (macOS)
 or `ss -ltnp 'sport = :8000'` (Linux); the output names the process
 holding the port. Either kill it or pass `--port 8001` (or any free
-port) to `nthlayer serve`. Re-running a backgrounded server without
+port) to `nthlayer-core serve`. Re-running a backgrounded server without
 killing the prior process is the usual cause.
 
 #### 3. Store path not writable
@@ -276,7 +280,7 @@ The store opens with `PRAGMA journal_mode=WAL`,
 writer, and the 5s busy-timeout absorbs transient contention from a
 single process's connection pool. A `database is locked` error that
 persists past 5s indicates two writers on the same file — typically a
-second `nthlayer serve` started against the same `NTHLAYER_STORE_PATH`.
+second `nthlayer-core serve` started against the same `NTHLAYER_STORE_PATH`.
 Kill the duplicate; the single-writer invariant is load-bearing. A
 stale `nthlayer.db-wal` file alone is not the cause and should not be
 deleted while any process holds the database open.
@@ -307,7 +311,7 @@ appear "missing" — the later file wins in load order.
 
 #### 7. Remote curl times out
 
-`nthlayer serve` binds to `0.0.0.0:8000` by default, so a local
+`nthlayer-core serve` binds to `0.0.0.0:8000` by default, so a local
 `curl localhost:8000/health` returns `{"status":"ok"}` even when
 remote clients time out. The timeout (as opposed to a connection
 refused) is the tell: the SYN is being dropped, not rejected, which
@@ -360,7 +364,7 @@ operational guidance is the upstream documentation at
 
 #### Process layout
 
-`nthlayer serve` and `litestream replicate` run side-by-side, both
+`nthlayer-core serve` and `litestream replicate` run side-by-side, both
 pointed at the same SQLite file (the path in `NTHLAYER_STORE_PATH`).
 There are two patterns.
 
@@ -369,7 +373,7 @@ systemd unit, both pointed at the same path:
 
 ```bash
 # Terminal 1 (or systemd unit nthlayer-core.service)
-NTHLAYER_STORE_PATH=/var/lib/nthlayer/store.db nthlayer serve
+NTHLAYER_STORE_PATH=/var/lib/nthlayer/store.db nthlayer-core serve
 
 # Terminal 2 (or systemd unit nthlayer-litestream.service)
 litestream replicate -config /etc/litestream.yml
@@ -378,7 +382,7 @@ litestream replicate -config /etc/litestream.yml
 **Wrapper.** Let Litestream supervise the serve process via `-exec`:
 
 ```bash
-litestream replicate -config /etc/litestream.yml -exec "nthlayer serve"
+litestream replicate -config /etc/litestream.yml -exec "nthlayer-core serve"
 ```
 
 The wrapper pattern is recommended: it gives single-process semantics
@@ -409,7 +413,7 @@ retention tuning.
 
 Verify replication is actually happening (a wrong bucket name or wrong
 credentials lets `litestream replicate` log errors and retry while
-`nthlayer serve` writes locally — the operator believes the store is
+`nthlayer-core serve` writes locally — the operator believes the store is
 durable when it is not). Run `litestream snapshots /var/lib/nthlayer/store.db`
 after a few writes; a successful replica produces at least one snapshot
 entry. No snapshots after sustained writes means the replica isn't
@@ -426,7 +430,7 @@ litestream restore -o /var/lib/nthlayer/store.db s3://YOUR_BUCKET/nthlayer-core
 You would run this in two situations: cold-starting a new VM that has
 no local store yet, or recovering from disk loss on the existing host.
 The server must not be running while the restore is in progress —
-Litestream and `nthlayer serve` both want to own the SQLite file, and
+Litestream and `nthlayer-core serve` both want to own the SQLite file, and
 overlapping ownership corrupts the restore.
 
 #### What this does NOT give you

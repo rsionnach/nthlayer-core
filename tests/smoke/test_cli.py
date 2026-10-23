@@ -5,7 +5,7 @@ import shutil
 import subprocess
 
 
-CONSOLE_SCRIPT = "nthlayer"
+CONSOLE_SCRIPT = "nthlayer-core"
 
 
 def test_console_script_on_path():

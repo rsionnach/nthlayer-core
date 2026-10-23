@@ -4,8 +4,12 @@
 
 ```bash
 pip install nthlayer-core
-nthlayer serve --host 0.0.0.0 --port 8000
+nthlayer-core serve --host 0.0.0.0 --port 8000
 ```
+
+The console script was `nthlayer` before 4.0.0; it was renamed to `nthlayer-core` because nthlayer-generate owns `nthlayer` (opensrm-dww5).
+
+**Upgrading from 3.x:** if nthlayer-generate is installed in the same environment, reinstall it after upgrading core, because the 3.x core package owned the `nthlayer` script file and the upgrade removes it: `pip install --force-reinstall --no-deps nthlayer-generate` (or `uv pip install --reinstall-package nthlayer-generate nthlayer-generate`).
 
 ## What it is
 
@@ -82,8 +86,8 @@ WAL mode + `PRAGMA synchronous=NORMAL` + `busy_timeout=5000`. Thread-local conne
 ## CLI
 
 ```bash
-nthlayer serve [--host 0.0.0.0] [--port 8000]   # start the HTTP server
-nthlayer -V                                       # print version
+nthlayer-core serve [--host 0.0.0.0] [--port 8000]   # start the HTTP server
+nthlayer-core -V                                    # print version
 ```
 
 ## NthLayer ecosystem
