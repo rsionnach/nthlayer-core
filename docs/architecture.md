@@ -57,7 +57,7 @@ nthlayer-core/
                   # __all__ resolves; asserts CLI on PATH + --help
                   # exits 0
   pyproject.toml  # name="nthlayer-core", version="1.0.0"; script:
-                  # nthlayer → nthlayer_core.cli:main; deps:
+                  # nthlayer-core → nthlayer_core.cli:main; deps:
                   # nthlayer-common, starlette, uvicorn, httpx
 ```
 
