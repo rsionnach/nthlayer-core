@@ -14,6 +14,11 @@ from nthlayer_core.cli import build_parser
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
+# Lines in docs/deploying.md containing this text are exempt from the guard: the
+# note there ("The console script was `nthlayer` before 4.0.0 ...") names the
+# old script on purpose. Keep in sync with that note.
+RENAME_NOTE_MARKER = "before 4.0.0"
+
 
 def _scripts() -> dict[str, str]:
     data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
@@ -37,8 +42,12 @@ def test_parser_prog_is_nthlayer_core() -> None:
 def test_deploying_doc_invokes_nthlayer_core_not_nthlayer() -> None:
     text = (REPO_ROOT / "docs" / "deploying.md").read_text(encoding="utf-8")
     # The rename note legitimately names the old script.
-    text = "\n".join(ln for ln in text.splitlines() if "before 4.0.0" not in ln)
-    # A bare `nthlayer` followed by a space/EOL/backtick, not nthlayer-core,
-    # nthlayer-common, NTHLAYER_*, or a path like /var/lib/nthlayer/.
-    bare = re.findall(r"(?<![\w/.-])nthlayer(?=\s+(?:serve|--version)|`)", text)
+    text = "\n".join(ln for ln in text.splitlines() if RENAME_NOTE_MARKER not in ln)
+    # Matches the bare word `nthlayer` (not preceded by a word char, `/`, `.` or
+    # `-`) that is followed by whitespace then `serve` or `--version`, or
+    # directly by a backtick, `:` or `-V`. So it ignores nthlayer-core,
+    # nthlayer-common, NTHLAYER_*, and paths like /var/lib/nthlayer/.
+    bare = re.findall(
+        r"(?<![\w/.-])nthlayer(?=\s+(?:serve|--version)|`|:|-V)", text
+    )
     assert not bare, f"deploying.md still names the old script: {bare}"

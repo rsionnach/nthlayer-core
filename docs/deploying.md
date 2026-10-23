@@ -31,7 +31,7 @@ nthlayer-core --version
 ```
 
 ```
-nthlayer-core 1.7.0
+nthlayer-core X.Y.Z
 ```
 
 The console script was `nthlayer` before 4.0.0; it was renamed to `nthlayer-core` because nthlayer-generate owns `nthlayer` (opensrm-dww5).
@@ -223,7 +223,7 @@ problem. Table summarises symptoms; paragraphs below give the diagnosis.
 
 | # | Symptom | Cause | Fix |
 |---|---|---|---|
-| 1 | `nthlayer: command not found` after install | uv tool-shim dir not on `PATH` | `uv tool update-shell` (or add `~/.local/bin` to `PATH`) |
+| 1 | `nthlayer-core: command not found` after install | uv tool-shim dir not on `PATH` | `uv tool update-shell` (or add `~/.local/bin` to `PATH`) |
 | 2 | `OSError: [Errno 48/98] Address already in use` | Port 8000 taken | `nthlayer-core serve --port 8001` or kill the prior process |
 | 3 | `sqlite3.OperationalError: unable to open database file` | Cwd not writable, or `NTHLAYER_STORE_PATH` points at a missing dir, **or points at a directory itself instead of a file** | `NTHLAYER_STORE_PATH=/var/lib/nthlayer/store.db` (ensure dir exists and is writable; the path is the file, not the directory) or chdir to a writable dir |
 | 4 | `sqlite3.OperationalError: database is locked` (persistent, not transient) | Two `nthlayer-core serve` processes on the same DB | Kill the duplicate; one writer per store. WAL + 5s busy-timeout handles transient contention, not two writers |
