@@ -6,6 +6,28 @@ across the ecosystem under the v1.5 epic plan; we did not reconstruct phase-by-p
 git history because that history did not exist as commits at the time the work
 was being done. This narrative is the honest substitute.
 
+## [4.0.0](https://github.com/rsionnach/nthlayer-core/compare/v3.0.2...v4.0.0) (2026-10-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deploying:** upgrading from 3.x in an environment shared with nthlayer-generate removes the `nthlayer` script; reinstall nthlayer-generate afterwards.
+* **cli:** the `nthlayer` console script is now `nthlayer-core`. Replace `nthlayer serve` with `nthlayer-core serve`.
+
+### Features
+
+* **cli:** rename console script nthlayer → nthlayer-core (opensrm-dww5) ([53ac90a](https://github.com/rsionnach/nthlayer-core/commit/53ac90aee71b2be9f1997b195808cf067e02e811))
+
+
+### Dependencies
+
+* require nthlayer-common 5.3.1 (opensrm-dww5) ([c0fd415](https://github.com/rsionnach/nthlayer-core/commit/c0fd415436f29c671454787d0525c8398878f3d0))
+
+
+### Documentation
+
+* **deploying:** reinstall nthlayer-generate after upgrading from core 3.x (opensrm-dww5) ([5053adc](https://github.com/rsionnach/nthlayer-core/commit/5053adc6c1a8488ad9a7a00e8a53be7a8bb6af1c))
+
 ## [3.0.2](https://github.com/rsionnach/nthlayer-core/compare/v3.0.1...v3.0.2) (2026-10-23)
 
 
