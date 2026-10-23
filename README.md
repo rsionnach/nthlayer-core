@@ -9,6 +9,8 @@ nthlayer-core serve --host 0.0.0.0 --port 8000
 
 The console script was `nthlayer` before 4.0.0; it was renamed to `nthlayer-core` because nthlayer-generate owns `nthlayer` (opensrm-dww5).
 
+**Upgrading from 3.x:** if nthlayer-generate is installed in the same environment, reinstall it after upgrading core, because the 3.x core package owned the `nthlayer` script file and the upgrade removes it: `pip install --force-reinstall --no-deps nthlayer-generate` (or `uv pip install --reinstall-package nthlayer-generate nthlayer-generate`).
+
 ## What it is
 
 `nthlayer-core` is the single source of truth for the NthLayer runtime. It owns the SQLite store, exposes an HTTP API, and is the only component that touches the database. Tier 2 workers ([`nthlayer-workers`](https://github.com/rsionnach/nthlayer-workers)) and the Tier 3 operator TUI ([`nthlayer-bench`](https://github.com/rsionnach/nthlayer-bench)) talk to core exclusively over HTTP — never directly to SQLite.
