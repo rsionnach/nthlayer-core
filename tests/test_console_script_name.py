@@ -88,19 +88,30 @@ def test_stale_script_regex_matches(text: str) -> None:
         "nthlayer.db-wal",
         "pip install nthlayer-core",
         "nthlayer-core --version",
+        # `-` in the lookbehind: a hyphenated prefix is another name, not
+        # the bare script (e.g. a `foo-nthlayer` binary or path segment).
+        "foo-nthlayer serve",
     ],
 )
 def test_stale_script_regex_ignores(text: str) -> None:
     assert not STALE_SCRIPT_RE.search(text), text
 
 
+# Top-level docs that tell a reader how to run core. CHANGELOG.md is excluded:
+# it is a historical record and names the old script on purpose.
+_ROOT_DOCS = ("README.md", "AGENTS.md", "CONTRIBUTING.md", "CLAUDE.md")
+
+
 def _doc_paths() -> list[pathlib.Path]:
-    return [REPO_ROOT / "README.md", *sorted((REPO_ROOT / "docs").glob("*.md"))]
+    return [
+        *(REPO_ROOT / name for name in _ROOT_DOCS),
+        *sorted((REPO_ROOT / "docs").glob("*.md")),
+    ]
 
 
 def test_docs_exist_so_guard_is_not_vacuous() -> None:
     names = {p.name for p in _doc_paths()}
-    assert {"README.md", "deploying.md", "architecture.md"} <= names
+    assert {*_ROOT_DOCS, "deploying.md", "architecture.md"} <= names
 
 
 @pytest.mark.parametrize("path", _doc_paths(), ids=lambda p: p.name)
