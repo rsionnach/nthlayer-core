@@ -109,7 +109,7 @@ def test_cli_subsection_matches_argparse() -> None:
     (plus any subparsers) so the test sees exactly what users see.
 
     Pins both *flag* parity and *subcommand-name* parity — a new top-level
-    subcommand (e.g. ``nthlayer migrate``) added to cli.py without a
+    subcommand (e.g. ``nthlayer-core migrate``) added to cli.py without a
     matching mention in the deploying.md CLI section fails this test.
     """
     section = _doc_section("### CLI")
@@ -144,7 +144,7 @@ def test_cli_subsection_matches_argparse() -> None:
 
     # Subcommand-name parity: each subcommand registered with the parser
     # must appear verbatim in the CLI section (typically inside a code
-    # block like ``nthlayer serve``). Catches "new subcommand added,
+    # block like ``nthlayer-core serve``). Catches "new subcommand added,
     # nobody updated the docs."
     missing_subcommands = {sc for sc in src_subcommands if sc not in section}
     assert not missing_subcommands, (

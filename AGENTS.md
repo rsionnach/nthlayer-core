@@ -25,8 +25,8 @@ uv run pytest tests/test_<name>.py -v  # single file
 uv run pytest -k "<expr>" -v           # single test by name
 uv run ruff check src/ tests/          # lint
 uv run python scripts/regen_openapi.py # regen docs/api/openapi.json
-nthlayer serve --host 0.0.0.0 --port 8000   # start the HTTP server
-nthlayer -V                                  # print version
+nthlayer-core serve --host 0.0.0.0 --port 8000   # start the HTTP server
+nthlayer-core -V                               # print version
 ```
 
 **OpenAPI spec discipline (opensrm-tu04.1).** Any edit to a

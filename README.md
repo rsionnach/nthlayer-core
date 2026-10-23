@@ -4,8 +4,10 @@
 
 ```bash
 pip install nthlayer-core
-nthlayer serve --host 0.0.0.0 --port 8000
+nthlayer-core serve --host 0.0.0.0 --port 8000
 ```
+
+The console script was `nthlayer` before 4.0.0; it was renamed to `nthlayer-core` because nthlayer-generate owns `nthlayer` (opensrm-dww5).
 
 ## What it is
 
@@ -82,8 +84,8 @@ WAL mode + `PRAGMA synchronous=NORMAL` + `busy_timeout=5000`. Thread-local conne
 ## CLI
 
 ```bash
-nthlayer serve [--host 0.0.0.0] [--port 8000]   # start the HTTP server
-nthlayer -V                                       # print version
+nthlayer-core serve [--host 0.0.0.0] [--port 8000]   # start the HTTP server
+nthlayer-core -V                                    # print version
 ```
 
 ## NthLayer ecosystem

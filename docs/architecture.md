@@ -11,7 +11,7 @@ reference.
 nthlayer-core/
   src/nthlayer_core/
     __init__.py
-    cli.py        # nthlayer serve [--host 0.0.0.0] [--port 8000]
+    cli.py        # nthlayer-core serve [--host 0.0.0.0] [--port 8000]
     catalogue.py  # ManifestCatalogue: loads/caches OpenSRM manifests
                   # from dir, mtime-based polling (load, poll, get,
                   # list_all, to_dict_list). _manifest_to_dict()
@@ -325,7 +325,7 @@ Core-specific methods (not on the VerdictStore ABC):
 - `tests/smoke/test_imports.py` — walks every module under
   `nthlayer_core` via `pkgutil`; asserts every `__all__` symbol
   resolves via `getattr`.
-- `tests/smoke/test_cli.py` — asserts the `nthlayer` console script is
+- `tests/smoke/test_cli.py` — asserts the `nthlayer-core` console script is
   on PATH and `--help` exits 0 with non-empty stdout.
 
 ## Runtime dependencies

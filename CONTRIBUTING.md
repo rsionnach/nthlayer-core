@@ -29,7 +29,7 @@ cd nthlayer-core
 uv sync --extra dev                  # creates .venv with test/lint tools
 
 # Run the API locally (optional; Ctrl-C to stop, not needed before tests)
-uv run nthlayer serve --host 0.0.0.0 --port 8000
+uv run nthlayer-core serve --host 0.0.0.0 --port 8000
 
 # Run the test suite
 uv run pytest -q                     # full suite
