@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nthlayer-core"
-version = "4.0.5"
+version = "4.0.6"
 description = "NthLayer core — reliability-critical verdict store, case management, and HTTP API"
 readme = "README.md"
 license = {text = "Apache-2.0"}

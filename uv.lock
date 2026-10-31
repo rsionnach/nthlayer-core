@@ -970,7 +970,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "nthlayer-core"
-version = "4.0.5"
+version = "4.0.6"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
